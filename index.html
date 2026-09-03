@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>ChitChat — Chat</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ============================== TOASTS ============================== -->
+<div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+
+<!-- ============================== AUTH SCREENS ============================== -->
+<div id="auth-screen" class="auth-screen">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <span class="brand-mark">C</span>
+      <span class="brand-name">ChitChat</span>
+    </div>
+
+    <!-- LOGIN -->
+    <form id="login-form" class="auth-form">
+      <h1>Welcome back</h1>
+      <p class="auth-sub">Sign in to keep talking.</p>
+
+      <label class="field">
+        <span>Email</span>
+        <input type="email" id="login-email" autocomplete="email" required />
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input type="password" id="login-password" autocomplete="current-password" required />
+      </label>
+
+      <div id="login-error" class="form-error" role="alert"></div>
+
+      <button type="submit" class="btn-primary" id="login-submit">
+        <span class="btn-label">Sign in</span>
+        <span class="btn-spinner" hidden></span>
+      </button>
+
+      <button type="button" class="link-btn" id="forgot-password-btn">Forgot password?</button>
+      <p class="auth-switch">New here? <button type="button" class="link-btn" id="show-register">Create an account</button></p>
+    </form>
+
+    <!-- REGISTER -->
+    <form id="register-form" class="auth-form" hidden>
+      <h1>Create your account</h1>
+      <p class="auth-sub">Join and start a conversation.</p>
+
+      <label class="field">
+        <span>Display name</span>
+        <input type="text" id="register-display-name" autocomplete="name" required maxlength="60" />
+      </label>
+      <label class="field">
+        <span>Username</span>
+        <input type="text" id="register-username" autocomplete="username" required maxlength="20" placeholder="letters, numbers, _ and ." />
+      </label>
+      <label class="field">
+        <span>Email</span>
+        <input type="email" id="register-email" autocomplete="email" required />
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input type="password" id="register-password" autocomplete="new-password" required minlength="6" />
+      </label>
+
+      <div id="register-error" class="form-error" role="alert"></div>
+
+      <button type="submit" class="btn-primary" id="register-submit">
+        <span class="btn-label">Create account</span>
+        <span class="btn-spinner" hidden></span>
+      </button>
+
+      <p class="auth-switch">Already have an account? <button type="button" class="link-btn" id="show-login">Sign in</button></p>
+    </form>
+  </div>
+</div>
+
+<!-- ============================== APP SHELL ============================== -->
+<div id="app-shell" class="app-shell" hidden>
+
+  <!-- SIDEBAR: conversation list -->
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-top">
+      <button id="open-profile-btn" class="avatar-btn" title="Your profile">
+        <img id="my-avatar" class="avatar avatar-sm" alt="" />
+        <span id="my-presence-dot" class="presence-dot online"></span>
+      </button>
+      <div class="sidebar-top-actions">
+        <button id="theme-toggle-btn" class="icon-btn" title="Toggle dark mode" aria-label="Toggle dark mode">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.5 5.5 0 0 1-7.54-7.54A9.05 9.05 0 0 0 12 3z"/></svg>
+        </button>
+        <button id="logout-btn" class="icon-btn" title="Log out" aria-label="Log out">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M16 17v-3H9v-4h7V7l5 5-5 5M14 2a2 2 0 0 1 2 2v2h-2V4H5v16h9v-2h2v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9z"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="search-wrap">
+      <input type="text" id="user-search-input" placeholder="Search people…" autocomplete="off" />
+      <div id="user-search-results" class="search-results" hidden></div>
+    </div>
+
+    <div id="conversation-list" class="conversation-list">
+      <div id="conversations-empty" class="empty-state" hidden>
+        <p class="empty-title">No conversations yet</p>
+        <p class="empty-sub">Search for someone to say hello.</p>
+      </div>
+      <div id="conversations-loading" class="list-loading">Loading conversations…</div>
+    </div>
+  </aside>
+
+  <!-- MAIN: active chat -->
+  <main id="chat-main" class="chat-main">
+
+    <!-- Empty state when nothing selected -->
+    <div id="chat-empty-state" class="chat-empty-state">
+      <div class="empty-illustration">💬</div>
+      <h2>Select a conversation</h2>
+      <p>Choose someone from your messages to start chatting.</p>
+    </div>
+
+    <!-- Active conversation -->
+    <div id="chat-active" class="chat-active" hidden>
+      <header class="chat-header">
+        <button id="back-to-list-btn" class="icon-btn mobile-only" aria-label="Back to conversations">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        </button>
+        <img id="chat-header-avatar" class="avatar avatar-sm" alt="" />
+        <div class="chat-header-info">
+          <div class="chat-header-name" id="chat-header-name">—</div>
+          <div class="chat-header-status" id="chat-header-status">—</div>
+        </div>
+        <div class="chat-header-actions">
+          <button id="toggle-msg-search-btn" class="icon-btn" title="Search messages" aria-label="Search messages">
+            <svg viewBox="0 0 24 24" width="19" height="19"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 5 1.5-1.5-5-5zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z"/></svg>
+          </button>
+          <div class="menu-wrap">
+            <button id="chat-menu-btn" class="icon-btn" title="Conversation options" aria-label="Conversation options">
+              <svg viewBox="0 0 24 24" width="19" height="19"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg>
+            </button>
+            <div id="chat-menu" class="dropdown-menu" hidden>
+              <button data-action="pin" class="dropdown-item">Pin conversation</button>
+              <button data-action="mute" class="dropdown-item">Mute conversation</button>
+              <button data-action="delete" class="dropdown-item danger">Delete conversation</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div id="msg-search-bar" class="msg-search-bar" hidden>
+        <input type="text" id="msg-search-input" placeholder="Search in this conversation…" />
+        <button id="msg-search-close" class="icon-btn" aria-label="Close search">✕</button>
+      </div>
+
+      <div id="messages-scroll" class="messages-scroll">
+        <div id="messages-loading" class="list-loading">Loading messages…</div>
+        <div id="messages-list" class="messages-list"></div>
+        <div id="messages-empty" class="empty-state" hidden>
+          <p class="empty-title">No messages yet</p>
+          <p class="empty-sub">Say hello 👋</p>
+        </div>
+      </div>
+
+      <div id="typing-indicator" class="typing-indicator" hidden></div>
+
+      <div id="reply-preview" class="reply-preview" hidden>
+        <div class="reply-preview-body">
+          <span class="reply-preview-label">Replying to <span id="reply-preview-name"></span></span>
+          <span id="reply-preview-text" class="reply-preview-text"></span>
+        </div>
+        <button id="reply-preview-cancel" class="icon-btn" aria-label="Cancel reply">✕</button>
+      </div>
+
+      <form id="message-form" class="message-form">
+        <button type="button" id="attach-btn" class="icon-btn" title="Attach image" aria-label="Attach image">📎</button>
+        <input type="file" id="image-input" accept="image/*" hidden />
+        <textarea id="message-input" placeholder="Message…" rows="1" maxlength="4000"></textarea>
+        <button type="button" id="emoji-btn" class="icon-btn" title="Insert emoji" aria-label="Insert emoji">😊</button>
+        <button type="submit" id="send-btn" class="icon-btn send-btn" title="Send" aria-label="Send message">
+          <span class="btn-label">➤</span>
+          <span class="btn-spinner" hidden></span>
+        </button>
+      </form>
+      <div id="emoji-picker" class="emoji-picker" hidden></div>
+    </div>
+  </main>
+</div>
+
+<!-- ============================== PROFILE / SETTINGS MODAL ============================== -->
+<div id="profile-modal" class="modal-overlay" hidden>
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Your profile</h2>
+      <button id="close-profile-btn" class="icon-btn" aria-label="Close">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="avatar-upload-row">
+        <img id="profile-avatar-preview" class="avatar avatar-lg" alt="" />
+        <div>
+          <button type="button" id="upload-avatar-btn" class="btn-secondary">Change photo</button>
+          <input type="file" id="avatar-input" accept="image/*" hidden />
+        </div>
+      </div>
+
+      <label class="field">
+        <span>Display name</span>
+        <input type="text" id="profile-display-name" maxlength="60" />
+      </label>
+      <label class="field">
+        <span>Username</span>
+        <input type="text" id="profile-username" maxlength="20" />
+      </label>
+      <label class="field">
+        <span>Bio</span>
+        <textarea id="profile-bio" rows="3" maxlength="200"></textarea>
+      </label>
+
+      <div id="profile-error" class="form-error" role="alert"></div>
+
+      <div class="settings-section">
+        <h3>Appearance</h3>
+        <div class="settings-row">
+          <span>Theme</span>
+          <div class="segmented" id="theme-segmented">
+            <button type="button" data-theme="light" class="segmented-btn">Light</button>
+            <button type="button" data-theme="dark" class="segmented-btn">Dark</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <span>Accent color</span>
+          <div class="accent-swatches" id="accent-swatches"></div>
+        </div>
+      </div>
+
+      <button id="save-profile-btn" class="btn-primary full-width">
+        <span class="btn-label">Save changes</span>
+        <span class="btn-spinner" hidden></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== IMAGE PREVIEW MODAL ============================== -->
+<div id="image-preview-modal" class="modal-overlay image-preview-overlay" hidden>
+  <button id="close-image-preview-btn" class="icon-btn image-preview-close" aria-label="Close">✕</button>
+  <img id="image-preview-img" alt="Full size preview" />
+</div>
+
+<!-- ============================== SUPABASE SDK ============================== -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
