@@ -111,9 +111,7 @@ function initials(name) {
 }
 function avatarUrl(profile) {
   if (profile && profile.avatar_url) return profile.avatar_url;
-  const seed = encodeURIComponent(initials(profile ? (profile.display_name || profile.username) : '?'));
-  const bg = '3E5C76';
-  return `https://api.dicebear.com/7.x/initials/svg?seed=${seed}&backgroundColor=${bg}&textColor=ffffff`;
+  return './default-avatar.svg';
 }
 function formatTime(iso) {
   const d = new Date(iso);
