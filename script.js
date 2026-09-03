@@ -2,7 +2,7 @@
 // CHITCHAT — APPLICATION LOGIC
 // ============================================================================
 
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+const supabaseClient = window.supabase.createClient(https://vcdtujvdvfhvyszmervz.supabase.co, eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjZHR1anZkdmZodnlzem1lcnZ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0MTE3NTcsImV4cCI6MjEwMzk4Nzc1N30.DiRo39HTxg47vUDVvHm2Lltw6sQ57b5XxaBEhaZRCA4, {
   auth: { persistSession: true, autoRefreshToken: true }
 });
 
