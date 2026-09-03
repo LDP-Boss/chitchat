@@ -9,6 +9,7 @@ const supabaseClient = window.supabase.createClient(
     auth: { persistSession: true, autoRefreshToken: true }
   }
 );
+
 // ---------------------------------------------------------------------------
 // STATE
 // ---------------------------------------------------------------------------
@@ -22,6 +23,7 @@ const state = {
   messageChannel: null,        // realtime channel for active conversation's messages/reactions
   typingChannel: null,
   presenceChannel: null,       // global presence channel
+  _presenceDbChannel: null,    // db-level presence channel
   conversationsChannel: null,  // realtime for conversation_members / new messages across all convos
   onlineUserIds: new Set(),
   typingTimeout: null,
@@ -178,7 +180,6 @@ $('login-form').addEventListener('submit', async (e) => {
     const password = $('login-password').value;
     const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error) throw error;
-    // onAuthStateChange picks up the rest
   } catch (err) {
     showAuthError($('login-error'), err);
   } finally {
@@ -273,7 +274,6 @@ async function bootApp() {
     const userId = state.session.user.id;
     let { data: profile, error } = await supabaseClient.from('profiles').select('*').eq('id', userId).single();
     if (error || !profile) {
-      // trigger may still be running just after signup — brief retry
       await new Promise(r => setTimeout(r, 700));
       ({ data: profile, error } = await supabaseClient.from('profiles').select('*').eq('id', userId).single());
     }
@@ -304,9 +304,9 @@ function teardownApp() {
   cleanupActiveConversationChannels();
   if (state.presenceChannel) supabaseClient.removeChannel(state.presenceChannel);
   if (state._presenceDbChannel) {
-  supabaseClient.removeChannel(state._presenceDbChannel);
-  state._presenceDbChannel = null;
-}
+    supabaseClient.removeChannel(state._presenceDbChannel);
+    state._presenceDbChannel = null;
+  }
   if (state.conversationsChannel) supabaseClient.removeChannel(state.conversationsChannel);
   state.presenceChannel = null;
   state.conversationsChannel = null;
@@ -338,11 +338,8 @@ async function setPresence(online) {
 }
 
 function subscribeGlobalPresence() {
-  // Prevent duplicate presence subscriptions
   if (state.presenceChannel) {
-    try {
-      supabaseClient.removeChannel(state.presenceChannel);
-    } catch (_) {}
+    try { supabaseClient.removeChannel(state.presenceChannel); } catch (_) {}
     state.presenceChannel = null;
   }
 
@@ -354,8 +351,6 @@ function subscribeGlobalPresence() {
     }
   });
 
-  // IMPORTANT:
-  // Register the presence callback BEFORE subscribe().
   channel.on('presence', { event: 'sync' }, () => {
     const presenceState = channel.presenceState();
     state.onlineUserIds = new Set(Object.keys(presenceState));
@@ -372,11 +367,8 @@ function subscribeGlobalPresence() {
 
   state.presenceChannel = channel;
 
-  // Database fallback for last-seen / online state
   if (state._presenceDbChannel) {
-    try {
-      supabaseClient.removeChannel(state._presenceDbChannel);
-    } catch (_) {}
+    try { supabaseClient.removeChannel(state._presenceDbChannel); } catch (_) {}
     state._presenceDbChannel = null;
   }
 
@@ -415,52 +407,7 @@ function subscribeGlobalPresence() {
       }
     )
     .subscribe();
-// 1. Create the channel first
-// 1. Create the channel first
-const presenceChan = supabaseClient.channel('online-users', {
-  config: {
-    presence: {
-      key: state.currentUser?.id || 'anonymous'
-    }
-  }
-});
 
-// 2. Save it to state
-state.presenceChannel = presenceChan;
-
-// 3. Attach presence listeners and subscribe
-presenceChan
-  .on('presence', { event: 'sync' }, () => {
-    const presenceState = presenceChan.presenceState();
-    state.onlineUserIds = new Set(Object.keys(presenceState));
-    refreshOnlineIndicators();
-  })
-  .subscribe(async (status) => {
-    if (status === 'SUBSCRIBED') {
-      await channel.track({ online_at: new Date().toISOString() });
-    }
-  });
-  channel.subscribe(async (status) => {
-    if (status === 'SUBSCRIBED') {
-      await channel.track({ online_at: new Date().toISOString() });
-    }
-  });
-
-  // Also listen for DB-level is_online / last_seen changes (covers users
-  // who close the tab without a clean disconnect, once they reconnect).
-  const dbChannel = supabase
-    .channel('presence:profiles-db')
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
-      if (state.activeOtherUser && payload.new.id === state.activeOtherUser.id) {
-        state.activeOtherUser = { ...state.activeOtherUser, ...payload.new };
-        renderChatHeaderStatus();
-      }
-      const conv = state.conversations.find(c => c.otherUser && c.otherUser.id === payload.new.id);
-      if (conv) { conv.otherUser = { ...conv.otherUser, ...payload.new }; renderConversationList(); }
-    })
-    .subscribe();
-
-  state.presenceChannel = channel;
   state._presenceDbChannel = dbChannel;
 
   window.addEventListener('pagehide', () => { setPresence(false); });
@@ -468,7 +415,7 @@ presenceChan
     if (document.visibilityState === 'hidden') setPresence(false);
     else setPresence(true);
   });
-
+}
 
 function isUserOnline(userId) {
   return state.onlineUserIds.has(userId);
@@ -487,7 +434,7 @@ async function loadConversations() {
   $('conversations-loading').hidden = false;
   $('conversations-empty').hidden = true;
   try {
-    const { data: memberships, error } = await supabase
+    const { data: memberships, error } = await supabaseClient
       .from('conversation_members')
       .select('conversation_id, is_pinned, is_muted, last_read_at, conversations(id, last_message_at, updated_at)')
       .eq('user_id', state.me.id);
@@ -500,14 +447,12 @@ async function loadConversations() {
       return;
     }
 
-    // other members
-    const { data: allMembers } = await supabase
+    const { data: allMembers } = await supabaseClient
       .from('conversation_members')
       .select('conversation_id, user_id, profiles(id, username, display_name, avatar_url, is_online, last_seen)')
       .in('conversation_id', convIds);
 
-    // last message per conversation
-    const { data: lastMessages } = await supabase
+    const { data: lastMessages } = await supabaseClient
       .from('messages')
       .select('id, conversation_id, content, message_type, sender_id, created_at, is_deleted')
       .in('conversation_id', convIds)
@@ -518,7 +463,6 @@ async function loadConversations() {
       if (!lastMsgByConv[m.conversation_id]) lastMsgByConv[m.conversation_id] = m;
     }
 
-    // unread counts (messages after my last_read_at, not sent by me)
     const unreadCounts = await computeUnreadCounts(convIds, memberships);
 
     state.conversations = memberships.map(m => {
@@ -533,7 +477,7 @@ async function loadConversations() {
         lastMessage: lastMsgByConv[m.conversation_id] || null,
         unreadCount: unreadCounts[m.conversation_id] || 0
       };
-    }).filter(c => c.otherUser); // hide malformed/self-only convos
+    }).filter(c => c.otherUser);
 
     renderConversationList();
   } catch (err) {
@@ -547,7 +491,7 @@ async function computeUnreadCounts(convIds, memberships) {
   const counts = {};
   const byConv = {};
   memberships.forEach(m => byConv[m.conversation_id] = m.last_read_at);
-  const { data } = await supabase
+  const { data } = await supabaseClient
     .from('messages')
     .select('conversation_id, sender_id, created_at')
     .in('conversation_id', convIds)
@@ -612,9 +556,7 @@ function renderConversationList() {
 }
 
 function subscribeConversationsRealtime() {
-  // New messages anywhere -> update sidebar (preview/unread/order), even for
-  // conversations not currently open.
-  const channel = supabase
+  const channel = supabaseClient
     .channel('conversations:messages-watch')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
       handleIncomingMessageForSidebar(payload.new);
@@ -638,7 +580,6 @@ function subscribeConversationsRealtime() {
 async function handleIncomingMessageForSidebar(msg) {
   let conv = state.conversations.find(c => c.id === msg.conversation_id);
   if (!conv) {
-    // new conversation we didn't know about yet (e.g. someone just started one with us)
     await loadConversations();
     return;
   }
@@ -657,7 +598,7 @@ $('user-search-input').addEventListener('input', debounce(async (e) => {
   const results = $('user-search-results');
   if (!q) { results.hidden = true; results.innerHTML = ''; return; }
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('profiles')
       .select('id, username, display_name, avatar_url')
       .neq('id', state.me.id)
@@ -773,7 +714,7 @@ async function loadMessages(conversationId) {
   $('messages-empty').hidden = true;
   $('messages-list').innerHTML = '';
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('messages')
       .select('*, message_reactions(id, user_id, reaction), message_reads(user_id, read_at)')
       .eq('conversation_id', conversationId)
@@ -804,7 +745,7 @@ function renderMessages() {
 
   let lastDay = null;
   let lastSender = null;
-  visible.forEach((msg, idx) => {
+  visible.forEach((msg) => {
     const day = formatDayLabel(msg.created_at);
     if (day !== lastDay) {
       const divider = document.createElement('div');
@@ -831,7 +772,6 @@ function renderMessageRow(msg, grouped) {
   const wrap = document.createElement('div');
   wrap.className = 'msg-bubble-wrap';
 
-  // hover actions (left side for mine, so they sit between avatar-side and bubble)
   const hoverActions = document.createElement('div');
   hoverActions.className = 'msg-hover-actions';
   if (!msg.is_deleted) {
@@ -971,7 +911,6 @@ $('reply-preview-cancel').addEventListener('click', hideReplyPreview);
 
 function startEditMessage(row, msg, bubble) {
   const wrap = qs('.msg-bubble-wrap', row);
-  const original = bubble.innerHTML;
   bubble.style.display = 'none';
   const box = document.createElement('div');
   box.className = 'msg-edit-box';
@@ -1022,10 +961,10 @@ $('image-preview-modal').addEventListener('click', (e) => { if (e.target === $('
 // REALTIME: messages, reactions, typing (per active conversation)
 // ---------------------------------------------------------------------------
 function subscribeToConversation(conversationId) {
-  const channel = supabase
+  const channel = supabaseClient
     .channel(`conv:${conversationId}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` }, (payload) => {
-      if (state.messages.some(m => m.id === payload.new.id)) return; // avoid dupes
+      if (state.messages.some(m => m.id === payload.new.id)) return;
       state.messages.push({ ...payload.new, message_reactions: [], message_reads: [] });
       renderMessages();
       scrollMessagesToBottom();
@@ -1061,7 +1000,7 @@ function subscribeToConversation(conversationId) {
 
   state.messageChannel = channel;
 
-  const typingChannel = supabase
+  const typingChannel = supabaseClient
     .channel(`typing:${conversationId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'typing_indicators', filter: `conversation_id=eq.${conversationId}` }, (payload) => {
       const row = payload.new;
@@ -1118,7 +1057,7 @@ messageInput.addEventListener('keydown', (e) => {
 function sendTypingSignal() {
   if (!state.activeConversationId) return;
   const now = Date.now();
-  if (now - state.lastTypingSentAt < 2000) return; // throttle DB writes
+  if (now - state.lastTypingSentAt < 2000) return;
   state.lastTypingSentAt = now;
   supabaseClient.from('typing_indicators').upsert({
     conversation_id: state.activeConversationId,
@@ -1164,7 +1103,7 @@ $('image-input').addEventListener('change', async (e) => {
   if (!file.type.startsWith('image/')) { toast('Please select an image file', 'error'); return; }
   if (file.size > 8 * 1024 * 1024) { toast('Image must be smaller than 8MB', 'error'); return; }
 
-  const uploadToast = toast('Uploading image…');
+  toast('Uploading image…');
   try {
     const ext = file.name.split('.').pop() || 'jpg';
     const path = `${state.me.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
