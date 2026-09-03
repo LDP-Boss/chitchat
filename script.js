@@ -450,7 +450,7 @@ function subscribeGlobalPresence() {
     if (document.visibilityState === 'hidden') setPresence(false);
     else setPresence(true);
   });
-}
+
 
 function isUserOnline(userId) {
   return state.onlineUserIds.has(userId);
