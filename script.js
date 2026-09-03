@@ -416,12 +416,19 @@ function subscribeGlobalPresence() {
   state._presenceDbChannel = dbChannel;
 }
 
-  channel.on('presence', { event: 'sync' }, () => {
+  state.presenceChannel = channel;
+
+channel
+  .on('presence', { event: 'sync' }, () => {
     const presenceState = channel.presenceState();
     state.onlineUserIds = new Set(Object.keys(presenceState));
     refreshOnlineIndicators();
+  })
+  .subscribe(async (status) => {
+    if (status === 'SUBSCRIBED') {
+      await channel.track({ online_at: new Date().toISOString() });
+    }
   });
-
   channel.subscribe(async (status) => {
     if (status === 'SUBSCRIBED') {
       await channel.track({ online_at: new Date().toISOString() });
