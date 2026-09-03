@@ -415,12 +415,19 @@ function subscribeGlobalPresence() {
       }
     )
     .subscribe();
+// 1. Create the channel first
+const channel = supabaseClient.channel('online-users', {
+  config: {
+    presence: {
+      key: state.currentUser?.id || 'anonymous'
+    }
+  }
+});
 
-  state._presenceDbChannel = dbChannel;
-}
+// 2. Save it to state
+state.presenceChannel = channel;
 
-  state.presenceChannel = channel;
-
+// 3. Attach presence listeners and subscribe
 channel
   .on('presence', { event: 'sync' }, () => {
     const presenceState = channel.presenceState();
