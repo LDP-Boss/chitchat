@@ -300,6 +300,10 @@ function teardownApp() {
   state.activeConversationId = null;
   cleanupActiveConversationChannels();
   if (state.presenceChannel) supabaseClient.removeChannel(state.presenceChannel);
+  if (state._presenceDbChannel) {
+  supabaseClient.removeChannel(state._presenceDbChannel);
+  state._presenceDbChannel = null;
+}
   if (state.conversationsChannel) supabaseClient.removeChannel(state.conversationsChannel);
   state.presenceChannel = null;
   state.conversationsChannel = null;
@@ -331,11 +335,86 @@ async function setPresence(online) {
 }
 
 function subscribeGlobalPresence() {
-  // Track this browser tab's presence in a Supabase Presence channel so
-  // other users see online status live, without polling the DB.
+  // Prevent duplicate presence subscriptions
+  if (state.presenceChannel) {
+    try {
+      supabaseClient.removeChannel(state.presenceChannel);
+    } catch (_) {}
+    state.presenceChannel = null;
+  }
+
   const channel = supabaseClient.channel('presence:global', {
-    config: { presence: { key: state.me.id } }
+    config: {
+      presence: {
+        key: state.me.id
+      }
+    }
   });
+
+  // IMPORTANT:
+  // Register the presence callback BEFORE subscribe().
+  channel.on('presence', { event: 'sync' }, () => {
+    const presenceState = channel.presenceState();
+    state.onlineUserIds = new Set(Object.keys(presenceState));
+    refreshOnlineIndicators();
+  });
+
+  channel.subscribe(async (status) => {
+    if (status === 'SUBSCRIBED') {
+      await channel.track({
+        online_at: new Date().toISOString()
+      });
+    }
+  });
+
+  state.presenceChannel = channel;
+
+  // Database fallback for last-seen / online state
+  if (state._presenceDbChannel) {
+    try {
+      supabaseClient.removeChannel(state._presenceDbChannel);
+    } catch (_) {}
+    state._presenceDbChannel = null;
+  }
+
+  const dbChannel = supabaseClient
+    .channel('presence:profiles-db')
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'profiles'
+      },
+      (payload) => {
+        if (
+          state.activeOtherUser &&
+          payload.new.id === state.activeOtherUser.id
+        ) {
+          state.activeOtherUser = {
+            ...state.activeOtherUser,
+            ...payload.new
+          };
+          renderChatHeaderStatus();
+        }
+
+        const conv = state.conversations.find(
+          c => c.otherUser && c.otherUser.id === payload.new.id
+        );
+
+        if (conv) {
+          conv.otherUser = {
+            ...conv.otherUser,
+            ...payload.new
+          };
+          renderConversationList();
+        }
+      }
+    )
+    .subscribe();
+
+  state._presenceDbChannel = dbChannel;
+}
 
   channel.on('presence', { event: 'sync' }, () => {
     const presenceState = channel.presenceState();
