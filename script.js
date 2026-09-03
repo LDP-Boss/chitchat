@@ -416,7 +416,8 @@ function subscribeGlobalPresence() {
     )
     .subscribe();
 // 1. Create the channel first
-const channel = supabaseClient.channel('online-users', {
+// 1. Create the channel first
+const presenceChan = supabaseClient.channel('online-users', {
   config: {
     presence: {
       key: state.currentUser?.id || 'anonymous'
@@ -425,12 +426,12 @@ const channel = supabaseClient.channel('online-users', {
 });
 
 // 2. Save it to state
-state.presenceChannel = channel;
+state.presenceChannel = presenceChan;
 
 // 3. Attach presence listeners and subscribe
-channel
+presenceChan
   .on('presence', { event: 'sync' }, () => {
-    const presenceState = channel.presenceState();
+    const presenceState = presenceChan.presenceState();
     state.onlineUserIds = new Set(Object.keys(presenceState));
     refreshOnlineIndicators();
   })
