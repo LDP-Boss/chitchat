@@ -447,3 +447,7 @@ img{ max-width:100%; display:block; }
 @media (prefers-reduced-motion: reduce){
   *{ animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+/* Always respect the HTML hidden attribute */
+[hidden] {
+  display: none !important;
+}
