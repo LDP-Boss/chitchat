@@ -4,7 +4,11 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>ChitChat — Chat</title>
-<link rel="icon" href="data:,">
+<link rel="icon" href="/icons/icon-192.png">
+
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#A855F7">
+
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -255,5 +259,14 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script src="script.js"></script>
+  <script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/service-worker.js")
+      .then(() => console.log("ChatBGM service worker registered"))
+      .catch((error) => console.error("Service worker registration failed:", error));
+  });
+}
+  </script>
 </body>
 </html>
