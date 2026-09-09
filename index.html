@@ -1,4 +1,58 @@
-="register-form" class="auth-form" hidden>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>(: Chatbgm : )</title>
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#A855F7">
+
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ============================== TOASTS ============================== -->
+<div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+
+<!-- ============================== AUTH SCREENS ============================== -->
+<div id="auth-screen" class="auth-screen">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <span class="brand-mark">C</span>
+      <span class="brand-name">ChitChat</span>
+    </div>
+
+    <!-- LOGIN -->
+    <form id="login-form" class="auth-form">
+      <h1>Welcome back</h1>
+      <p class="auth-sub">Sign in to keep talking.</p>
+
+      <label class="field">
+        <span>Email</span>
+        <input type="email" id="login-email" autocomplete="email" required />
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input type="password" id="login-password" autocomplete="current-password" required />
+      </label>
+
+      <div id="login-error" class="form-error" role="alert"></div>
+
+      <button type="submit" class="btn-primary" id="login-submit">
+        <span class="btn-label">Sign in</span>
+        <span class="btn-spinner" hidden></span>
+      </button>
+
+      <button type="button" class="link-btn" id="forgot-password-btn">Forgot password?</button>
+      <p class="auth-switch">New here? <button type="button" class="link-btn" id="show-register">Create an account</button></p>
+    </form>
+
+    <!-- REGISTER -->
+    <form id="register-form" class="auth-form" hidden>
       <h1>Create your account</h1>
       <p class="auth-sub">Join and start a conversation.</p>
 
@@ -217,4 +271,4 @@ if ("serviceWorker" in navigator) {
 }
   </script>
 </body>
-</html>
+                                             </html>
