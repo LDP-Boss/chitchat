@@ -1247,6 +1247,124 @@ async function deleteConversation(conv) {
 }
 
 // ============================================================================
+// PUSH NOTIFICATIONS
+// ============================================================================
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding)
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; i++) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+
+  return outputArray;
+}
+
+async function subscribeToPush() {
+  if (!state.me) {
+    toast('Please sign in first.', 'error');
+    return;
+  }
+
+  if (
+    !('serviceWorker' in navigator) ||
+    !('PushManager' in window) ||
+    !('Notification' in window)
+  ) {
+    toast('Push notifications are not supported on this device.', 'error');
+    return;
+  }
+
+  if (typeof VAPID_PUBLIC_KEY === 'undefined' || !VAPID_PUBLIC_KEY) {
+    toast('VAPID public key is missing.', 'error');
+    return;
+  }
+
+  try {
+    const permission = await Notification.requestPermission();
+
+    if (permission !== 'granted') {
+      toast('Notification permission was not granted.', 'error');
+      return;
+    }
+
+    const registration = await navigator.serviceWorker.ready;
+
+    let subscription = await registration.pushManager.getSubscription();
+
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+    }
+
+    const subscriptionJSON = subscription.toJSON();
+
+    const endpoint = subscriptionJSON.endpoint;
+    const p256dh = subscriptionJSON.keys &&
+                   subscriptionJSON.keys.p256dh;
+    const auth = subscriptionJSON.keys &&
+                 subscriptionJSON.keys.auth;
+
+    if (!endpoint || !p256dh || !auth) {
+      throw new Error('Invalid push subscription.');
+    }
+
+    const { data: existing, error: findError } =
+      await supabaseClient
+        .from('push_subscriptions')
+        .select('id')
+        .eq('endpoint', endpoint)
+        .maybeSingle();
+
+    if (findError) throw findError;
+
+    if (existing) {
+      const { error } = await supabaseClient
+        .from('push_subscriptions')
+        .update({
+          user_id: state.me.id,
+          p256dh,
+          auth
+        })
+        .eq('id', existing.id);
+
+      if (error) throw error;
+    } else {
+      const { error } = await supabaseClient
+        .from('push_subscriptions')
+        .insert({
+          user_id: state.me.id,
+          endpoint,
+          p256dh,
+          auth
+        });
+
+      if (error) throw error;
+    }
+
+    const btn = $('enable-notifications-btn');
+    btn.textContent = '✅ Enabled';
+    btn.disabled = true;
+
+    toast('Push notifications enabled 🔔', 'success');
+
+  } catch (err) {
+    console.error('Push subscription error:', err);
+    toast(
+      friendlyError(err, 'Could not enable notifications'),
+      'error'
+    );
+  }
+}
+// ============================================================================
 // PROFILE / SETTINGS MODAL
 // ============================================================================
 $('open-profile-btn').addEventListener('click', () => {
@@ -1259,6 +1377,10 @@ $('open-profile-btn').addEventListener('click', () => {
 });
 $('close-profile-btn').addEventListener('click', () => { $('profile-modal').hidden = true; });
 $('profile-modal').addEventListener('click', (e) => { if (e.target === $('profile-modal')) $('profile-modal').hidden = true; });
+$('enable-notifications-btn').addEventListener(
+  'click',
+  subscribeToPush
+);
 
 $('theme-segmented').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-theme]');
