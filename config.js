@@ -12,3 +12,5 @@
 
 const SUPABASE_URL = "https://vcdtujvdvfhvyszmervz.supabase.co"; // e.g. https://abcdefghijk.supabase.co
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjZHR1anZkdmZodnlzem1lcnZ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0MTE3NTcsImV4cCI6MjEwMzk4Nzc1N30.DiRo39HTxg47vUDVvHm2Lltw6sQ57b5XxaBEhaZRCA4"; // long string starting with "eyJ..."
+const VAPID_PUBLIC_KEY =
+  "BBJff66CLsiqMM25w8zKbvc85kc1VuIZO_agOoEehfHQVQewMBkw_Qp3LstjOMEYNGE-pbYd-O1qlIsAsfvr5g4";
