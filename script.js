@@ -775,7 +775,7 @@ function renderMessageRow(msg, grouped) {
   hoverActions.className = 'msg-hover-actions';
   if (!msg.is_deleted) {
     hoverActions.innerHTML = `
-      <button data-act="react" title="React">🙂</button>
+      <button data-act="react" title="React">❤</button>
       <button data-act="reply" title="Reply">↩</button>
       ${mine ? '<button data-act="edit" title="Edit">✎</button><button data-act="delete" title="Delete">🗑</button>' : ''}
     `;
