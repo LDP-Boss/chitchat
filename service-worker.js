@@ -8,10 +8,6 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// We intentionally do NOT intercept fetch requests.
-// ChatBGM uses Supabase for authentication and realtime chat,
-// so leaving network requests untouched keeps existing functionality safe.
-
 self.addEventListener("push", (event) => {
   let data = {};
 
@@ -29,6 +25,11 @@ self.addEventListener("push", (event) => {
     body: data.body || "You have a new message.",
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
+    // Crucial for Android 8 / MIUI lock screen wake:
+    vibrate: [300, 150, 300, 150, 300],
+    tag: "chat-msg-" + Date.now(), // Force unique alert instead of collapsing
+    renotify: true,
+    requireInteraction: false,
     data: {
       url: data.url || "/"
     }
@@ -53,7 +54,6 @@ self.addEventListener("notificationclick", (event) => {
             return client.focus();
           }
         }
-
         return clients.openWindow(url);
       })
   );
