@@ -15,16 +15,16 @@ const supabaseClient = window.supabase.createClient(
 // ---------------------------------------------------------------------------
 const state = {
   session: null,
-  me: null,                    // my profile row
-  conversations: [],           // enriched conversation list
+  me: null,
+  conversations: [],
   activeConversationId: null,
   activeOtherUser: null,
-  messages: [],                // messages of the active conversation
-  messageChannel: null,        // realtime channel for active conversation's messages/reactions
+  messages: [],
+  messageChannel: null,
   typingChannel: null,
-  presenceChannel: null,       // global presence channel
-  _presenceDbChannel: null,    // db-level presence channel
-  conversationsChannel: null,  // realtime for conversation_members / new messages across all convos
+  presenceChannel: null,
+  _presenceDbChannel: null,
+  conversationsChannel: null,
   onlineUserIds: new Set(),
   typingTimeout: null,
   lastTypingSentAt: 0,
@@ -68,7 +68,7 @@ function friendlyError(err, fallback = 'Something went wrong') {
 }
 
 // ---------------------------------------------------------------------------
-// THEME & ACCENT (stored locally)
+// THEME & ACCENT & WALLPAPER
 // ---------------------------------------------------------------------------
 function initAppearance() {
   const theme = localStorage.getItem('kc_theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -107,13 +107,21 @@ function buildAccentSwatches() {
   applyAccent(localStorage.getItem('kc_accent') || ACCENTS[0]);
 }
 
+function initWallpaper() {
+  const saved = localStorage.getItem('chat_wallpaper');
+  applyWallpaper(saved || null);
+}
+
+function applyWallpaper(dataUrl) {
+  const container = $('messages-scroll');
+  if (container) {
+    container.style.backgroundImage = dataUrl ? `url('${dataUrl}')` : 'none';
+  }
+}
+
 // ---------------------------------------------------------------------------
 // UTILITIES
 // ---------------------------------------------------------------------------
-function initials(name) {
-  if (!name) return '?';
-  return name.trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join('');
-}
 function avatarUrl(profile) {
   if (profile && profile.avatar_url) return profile.avatar_url;
   return './default-avatar.svg';
@@ -283,6 +291,7 @@ async function bootApp() {
     $('auth-screen').hidden = true;
     $('app-shell').hidden = false;
     renderMyAvatar();
+    initWallpaper();
     await setPresence(true);
     subscribeGlobalPresence();
     subscribeConversationsRealtime();
@@ -324,7 +333,7 @@ function renderMyAvatar() {
 }
 
 // ============================================================================
-// PRESENCE (online / offline)
+// PRESENCE
 // ============================================================================
 
 async function setPresence(online) {
@@ -334,7 +343,7 @@ async function setPresence(online) {
       is_online: online,
       last_seen: new Date().toISOString()
     }).eq('id', state.me.id);
-  } catch (_) { /* best-effort */ }
+  } catch (_) {}
 }
 
 function subscribeGlobalPresence() {
@@ -344,11 +353,7 @@ function subscribeGlobalPresence() {
   }
 
   const channel = supabaseClient.channel('presence:global', {
-    config: {
-      presence: {
-        key: state.me.id
-      }
-    }
+    config: { presence: { key: state.me.id } }
   });
 
   channel.on('presence', { event: 'sync' }, () => {
@@ -359,9 +364,7 @@ function subscribeGlobalPresence() {
 
   channel.subscribe(async (status) => {
     if (status === 'SUBSCRIBED') {
-      await channel.track({
-        online_at: new Date().toISOString()
-      });
+      await channel.track({ online_at: new Date().toISOString() });
     }
   });
 
@@ -374,38 +377,17 @@ function subscribeGlobalPresence() {
 
   const dbChannel = supabaseClient
     .channel('presence:profiles-db')
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'profiles'
-      },
-      (payload) => {
-        if (
-          state.activeOtherUser &&
-          payload.new.id === state.activeOtherUser.id
-        ) {
-          state.activeOtherUser = {
-            ...state.activeOtherUser,
-            ...payload.new
-          };
-          renderChatHeaderStatus();
-        }
-
-        const conv = state.conversations.find(
-          c => c.otherUser && c.otherUser.id === payload.new.id
-        );
-
-        if (conv) {
-          conv.otherUser = {
-            ...conv.otherUser,
-            ...payload.new
-          };
-          renderConversationList();
-        }
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
+      if (state.activeOtherUser && payload.new.id === state.activeOtherUser.id) {
+        state.activeOtherUser = { ...state.activeOtherUser, ...payload.new };
+        renderChatHeaderStatus();
       }
-    )
+      const conv = state.conversations.find(c => c.otherUser && c.otherUser.id === payload.new.id);
+      if (conv) {
+        conv.otherUser = { ...conv.otherUser, ...payload.new };
+        renderConversationList();
+      }
+    })
     .subscribe();
 
   state._presenceDbChannel = dbChannel;
@@ -449,7 +431,7 @@ async function loadConversations() {
 
     const { data: allMembers } = await supabaseClient
       .from('conversation_members')
-      .select('conversation_id, user_id, profiles(id, username, display_name, avatar_url, is_online, last_seen)')
+      .select('conversation_id, user_id, profiles(id, username, display_name, avatar_url, is_online, last_seen, bio)')
       .in('conversation_id', convIds);
 
     const { data: lastMessages } = await supabaseClient
@@ -530,6 +512,8 @@ function renderConversationList() {
     const preview = conv.lastMessage
       ? (conv.lastMessage.is_deleted ? 'This message was deleted'
         : conv.lastMessage.message_type === 'image' ? '📷 Photo'
+        : conv.lastMessage.message_type === 'video' ? '🎥 Video'
+        : conv.lastMessage.message_type === 'file' ? '📁 Attachment'
         : conv.lastMessage.content)
       : 'Say hello 👋';
 
@@ -591,7 +575,7 @@ async function handleIncomingMessageForSidebar(msg) {
 }
 
 // ---------------------------------------------------------------------------
-// USER SEARCH -> open/create conversation
+// SEARCH & OPEN CONVERSATIONS
 // ---------------------------------------------------------------------------
 $('user-search-input').addEventListener('input', debounce(async (e) => {
   const q = e.target.value.trim();
@@ -600,7 +584,7 @@ $('user-search-input').addEventListener('input', debounce(async (e) => {
   try {
     const { data, error } = await supabaseClient
       .from('profiles')
-      .select('id, username, display_name, avatar_url')
+      .select('id, username, display_name, avatar_url, bio')
       .neq('id', state.me.id)
       .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`)
       .limit(12);
@@ -646,7 +630,7 @@ async function startConversationWith(user) {
 }
 
 // ============================================================================
-// ACTIVE CONVERSATION / MESSAGES
+// ACTIVE CONVERSATION & MESSAGES
 // ============================================================================
 
 function cleanupActiveConversationChannels() {
@@ -675,6 +659,7 @@ async function openConversation(conversationId) {
   $('chat-header-name').textContent = conv.otherUser.display_name;
   renderChatHeaderStatus();
   updateChatMenuLabels(conv);
+  initWallpaper();
 
   renderConversationList();
 
@@ -707,6 +692,20 @@ function updateChatMenuLabels(conv) {
 
 $('back-to-list-btn').addEventListener('click', () => {
   $('app-shell').classList.remove('mobile-chat-open');
+});
+
+// OPPOSITE USER PROFILE OPEN/CLOSE
+$('chat-header-user-btn').addEventListener('click', () => {
+  if (!state.activeOtherUser) return;
+  $('other-avatar').src = avatarUrl(state.activeOtherUser);
+  $('other-display-name').textContent = state.activeOtherUser.display_name || 'User';
+  $('other-username').textContent = `@${state.activeOtherUser.username || ''}`;
+  $('other-bio').textContent = state.activeOtherUser.bio || 'No bio written yet.';
+  $('other-profile-modal').hidden = false;
+});
+$('close-other-profile-btn').addEventListener('click', () => { $('other-profile-modal').hidden = true; });
+$('other-profile-modal').addEventListener('click', (e) => {
+  if (e.target === $('other-profile-modal')) $('other-profile-modal').hidden = true;
 });
 
 async function loadMessages(conversationId) {
@@ -796,9 +795,18 @@ function renderMessageRow(msg, grouped) {
         inner += `<div class="msg-reply-quote">${escapeHtml((label || '').slice(0, 80))}</div>`;
       }
     }
+
     if (msg.message_type === 'image' && msg.media_url) {
-      inner += `<img class="msg-image" src="${msg.media_url}" alt="Shared image" />`;
+      inner += `<img class="msg-image" src="${msg.media_url}" alt="Photo" />`;
       if (msg.content) inner += `<div style="padding:6px 4px 2px;">${escapeHtml(msg.content)}</div>`;
+    } else if (msg.message_type === 'video' && msg.media_url) {
+      inner += `<video controls class="msg-video" style="max-width:100%; border-radius:8px;" src="${msg.media_url}"></video>`;
+    } else if (msg.message_type === 'audio' && msg.media_url) {
+      inner += `<audio controls style="width:100%;" src="${msg.media_url}"></audio>`;
+    } else if (msg.message_type === 'file' && msg.media_url) {
+      inner += `<a href="${msg.media_url}" target="_blank" download style="display:flex; align-items:center; gap:8px; text-decoration:underline; word-break:break-all;">
+                  📁 <span>${escapeHtml(msg.content || 'Download Attachment')}</span>
+                </a>`;
     } else {
       inner += escapeHtml(msg.content || '');
     }
@@ -827,7 +835,6 @@ function renderMessageRow(msg, grouped) {
   else { row.appendChild(wrap); row.appendChild(hoverActions); }
 
   bindMessageActions(row, msg, bubble);
-
   return row;
 }
 
@@ -958,7 +965,7 @@ $('close-image-preview-btn').addEventListener('click', () => { $('image-preview-
 $('image-preview-modal').addEventListener('click', (e) => { if (e.target === $('image-preview-modal')) $('image-preview-modal').hidden = true; });
 
 // ---------------------------------------------------------------------------
-// REALTIME: messages, reactions, typing (per active conversation)
+// REALTIME: messages, typing
 // ---------------------------------------------------------------------------
 function subscribeToConversation(conversationId) {
   const channel = supabaseClient
@@ -1035,11 +1042,11 @@ async function markConversationRead(conversationId) {
     await supabaseClient.rpc('mark_conversation_read', { p_conversation_id: conversationId });
     const conv = state.conversations.find(c => c.id === conversationId);
     if (conv) { conv.unreadCount = 0; renderConversationList(); }
-  } catch (_) { /* best effort */ }
+  } catch (_) {}
 }
 
 // ============================================================================
-// SENDING MESSAGES
+// SENDING MESSAGES (ENTER TO SEND)
 // ============================================================================
 
 const messageInput = $('message-input');
@@ -1047,10 +1054,14 @@ messageInput.addEventListener('input', () => {
   autoResize(messageInput);
   sendTypingSignal();
 });
+
+// Press Enter to Send, Shift+Enter for new line
 messageInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
-    $('message-form').requestSubmit();
+    if (messageInput.value.trim()) {
+      $('message-form').requestSubmit();
+    }
   }
 });
 
@@ -1092,45 +1103,64 @@ $('message-form').addEventListener('submit', async (e) => {
 });
 
 // ---------------------------------------------------------------------------
-// IMAGE UPLOAD
+// MULTIPLE FILE UPLOADS (IMAGES, VIDEOS, AUDIO, DOCUMENTS)
 // ---------------------------------------------------------------------------
 $('attach-btn').addEventListener('click', () => $('image-input').click());
 $('image-input').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
+  const files = Array.from(e.target.files);
   e.target.value = '';
-  if (!file || !state.activeConversationId) return;
+  if (!files.length || !state.activeConversationId) return;
 
-  if (!file.type.startsWith('image/')) { toast('Please select an image file', 'error'); return; }
-  if (file.size > 8 * 1024 * 1024) { toast('Image must be smaller than 8MB', 'error'); return; }
+  toast(`Uploading ${files.length} file(s)…`);
 
-  toast('Uploading image…');
-  try {
-    const ext = file.name.split('.').pop() || 'jpg';
-    const path = `${state.me.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error: uploadError } = await supabaseClient.storage.from('chat-media').upload(path, file, { upsert: false });
-    if (uploadError) throw uploadError;
-    const { data: pub } = supabaseClient.storage.from('chat-media').getPublicUrl(path);
+  for (const file of files) {
+    if (file.size > 20 * 1024 * 1024) {
+      toast(`${file.name} is too large (max 20MB)`, 'error');
+      continue;
+    }
 
-    const { error } = await supabaseClient.from('messages').insert({
-      conversation_id: state.activeConversationId,
-      sender_id: state.me.id,
-      message_type: 'image',
-      media_url: pub.publicUrl,
-      content: null,
-      reply_to_id: state.replyTarget ? state.replyTarget.id : null
-    });
-    if (error) throw error;
-    hideReplyPreview();
-    toast('Image sent', 'success');
-  } catch (err) {
-    toast(friendlyError(err, 'Image upload failed'), 'error');
+    try {
+      const ext = file.name.split('.').pop() || 'bin';
+      const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const storagePath = `${state.me.id}/${Date.now()}-${Math.random().toString(36).slice(2)}-${cleanFileName}`;
+
+      const { error: uploadError } = await supabaseClient.storage
+        .from('chat-media')
+        .upload(storagePath, file, { upsert: false });
+
+      if (uploadError) throw uploadError;
+
+      const { data: pub } = supabaseClient.storage
+        .from('chat-media')
+        .getPublicUrl(storagePath);
+
+      let msgType = 'file';
+      if (file.type.startsWith('image/')) msgType = 'image';
+      else if (file.type.startsWith('video/')) msgType = 'video';
+      else if (file.type.startsWith('audio/')) msgType = 'audio';
+
+      const { error: msgError } = await supabaseClient.from('messages').insert({
+        conversation_id: state.activeConversationId,
+        sender_id: state.me.id,
+        message_type: msgType,
+        media_url: pub.publicUrl,
+        content: file.name,
+        reply_to_id: state.replyTarget ? state.replyTarget.id : null
+      });
+
+      if (msgError) throw msgError;
+    } catch (err) {
+      toast(friendlyError(err, `Failed to upload ${file.name}`), 'error');
+    }
   }
+
+  hideReplyPreview();
 });
 
 // ---------------------------------------------------------------------------
-// EMOJI PICKER (for composer)
+// EMOJI PICKER
 // ---------------------------------------------------------------------------
-const COMPOSER_EMOJIS = ['😀','😂','😍','😊','😉','😢','😮','😡','👍','👎','🙏','🔥','🎉','❤️','💯','👏','🤔','😴','😎','🥳','😅','🤝','👀','✨'];
+const COMPOSER_EMOJIS = ['😀','😂','😍','😊','😉','😢','😮','😡','👍','👎','🙏','🔥','🎉','❤️','💯','👏','🤔','😴','😎','🥳','😅','🤝','👀','✨','🥰','🥺','😘','🫂','🤗'];
 function buildEmojiPicker() {
   const el = $('emoji-picker');
   el.innerHTML = '';
@@ -1151,7 +1181,7 @@ document.addEventListener('click', (e) => {
 });
 
 // ============================================================================
-// MESSAGE SEARCH (within conversation)
+// MESSAGE SEARCH
 // ============================================================================
 $('toggle-msg-search-btn').addEventListener('click', () => {
   const bar = $('msg-search-bar');
@@ -1267,17 +1297,10 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 async function subscribeToPush() {
-  alert("1. Button Clicked!");
-
   if (!state.me) {
-    alert("Error: Sign in first!");
     toast('Please sign in first.', 'error');
     return;
   }
-
-  alert("2. VAPID KEY: " + (typeof VAPID_PUBLIC_KEY !== 'undefined' ? VAPID_PUBLIC_KEY : "NOT FOUND"));
-
-  // ... rest of the code
 
   if (
     !('serviceWorker' in navigator) ||
@@ -1301,9 +1324,7 @@ async function subscribeToPush() {
       return;
     }
 
-    // Explicitly register service-worker.js before requesting readiness
     await navigator.serviceWorker.register('/service-worker.js');
-
     const registration = await navigator.serviceWorker.ready;
 
     let subscription = await registration.pushManager.getSubscription();
@@ -1316,12 +1337,9 @@ async function subscribeToPush() {
     }
 
     const subscriptionJSON = subscription.toJSON();
-
     const endpoint = subscriptionJSON.endpoint;
-    const p256dh = subscriptionJSON.keys &&
-                   subscriptionJSON.keys.p256dh;
-    const auth = subscriptionJSON.keys &&
-                 subscriptionJSON.keys.auth;
+    const p256dh = subscriptionJSON.keys?.p256dh;
+    const auth = subscriptionJSON.keys?.auth;
 
     if (!endpoint || !p256dh || !auth) {
       throw new Error('Invalid push subscription.');
@@ -1339,24 +1357,13 @@ async function subscribeToPush() {
     if (existing) {
       const { error } = await supabaseClient
         .from('push_subscriptions')
-        .update({
-          user_id: state.me.id,
-          p256dh,
-          auth
-        })
+        .update({ user_id: state.me.id, p256dh, auth })
         .eq('id', existing.id);
-
       if (error) throw error;
     } else {
       const { error } = await supabaseClient
         .from('push_subscriptions')
-        .insert({
-          user_id: state.me.id,
-          endpoint,
-          p256dh,
-          auth
-        });
-
+        .insert({ user_id: state.me.id, endpoint, p256dh, auth });
       if (error) throw error;
     }
 
@@ -1365,18 +1372,14 @@ async function subscribeToPush() {
     btn.disabled = true;
 
     toast('Push notifications enabled 🔔', 'success');
-
   } catch (err) {
     console.error('Push subscription error:', err);
-    toast(
-      friendlyError(err, 'Could not enable notifications'),
-      'error'
-    );
+    toast(friendlyError(err, 'Could not enable notifications'), 'error');
   }
 }
 
 // ============================================================================
-// PROFILE / SETTINGS MODAL
+// PROFILE / SETTINGS & WALLPAPER HANDLERS
 // ============================================================================
 $('open-profile-btn').addEventListener('click', () => {
   $('profile-display-name').value = state.me.display_name;
@@ -1388,14 +1391,46 @@ $('open-profile-btn').addEventListener('click', () => {
 });
 $('close-profile-btn').addEventListener('click', () => { $('profile-modal').hidden = true; });
 $('profile-modal').addEventListener('click', (e) => { if (e.target === $('profile-modal')) $('profile-modal').hidden = true; });
-$('enable-notifications-btn').addEventListener(
-  'click',
-  subscribeToPush
-);
+$('enable-notifications-btn').addEventListener('click', subscribeToPush);
 
 $('theme-segmented').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-theme]');
   if (btn) applyTheme(btn.dataset.theme);
+});
+
+// WALLPAPER BUTTON LISTENERS
+$('upload-wallpaper-btn').addEventListener('click', () => {
+  $('wallpaper-input').click();
+});
+
+$('wallpaper-input').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+
+  if (!file.type.startsWith('image/')) {
+    toast('Please select an image file', 'error');
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    toast('Wallpaper must be smaller than 5MB', 'error');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    const dataUrl = event.target.result;
+    localStorage.setItem('chat_wallpaper', dataUrl);
+    applyWallpaper(dataUrl);
+    toast('Chat wallpaper updated', 'success');
+  };
+  reader.readAsDataURL(file);
+});
+
+$('reset-wallpaper-btn').addEventListener('click', () => {
+  localStorage.removeItem('chat_wallpaper');
+  applyWallpaper(null);
+  toast('Wallpaper removed', 'default');
 });
 
 $('upload-avatar-btn').addEventListener('click', () => $('avatar-input').click());
