@@ -1267,10 +1267,17 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 async function subscribeToPush() {
+  alert("1. Button Clicked!");
+
   if (!state.me) {
+    alert("Error: Sign in first!");
     toast('Please sign in first.', 'error');
     return;
   }
+
+  alert("2. VAPID KEY: " + (typeof VAPID_PUBLIC_KEY !== 'undefined' ? VAPID_PUBLIC_KEY : "NOT FOUND"));
+
+  // ... rest of the code
 
   if (
     !('serviceWorker' in navigator) ||
