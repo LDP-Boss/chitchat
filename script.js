@@ -871,38 +871,94 @@ function bindMessageActions(row, msg, bubble) {
 }
 
 function openReactionPicker(e, msg) {
+  e.preventDefault();
+  e.stopPropagation();
+
   qsa('.reaction-picker').forEach(p => p.remove());
+
+  const row = e.currentTarget.closest('.msg-row');
+  if (!row) return;
+
   const picker = document.createElement('div');
   picker.className = 'reaction-picker';
+
   REACTIONS.forEach(emoji => {
     const b = document.createElement('button');
+    b.type = 'button';
     b.textContent = emoji;
-    b.addEventListener('click', () => {
-      const already = msg.message_reactions?.some(r => r.user_id === state.me.id && r.reaction === emoji);
-      toggleReaction(msg.id, emoji, already);
+    b.addEventListener('pointerdown', async (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
       picker.remove();
+      const already = (msg.message_reactions || []).some(r => r.user_id === state.me.id && r.reaction === emoji);
+      await toggleReaction(msg.id, emoji, already);
     });
     picker.appendChild(b);
   });
-  e.currentTarget.parentElement.appendChild(picker);
-  setTimeout(() => document.addEventListener('click', function closer(ev) {
-    if (!picker.contains(ev.target) && ev.target !== e.currentTarget) { picker.remove(); document.removeEventListener('click', closer); }
-  }), 0);
+
+  row.appendChild(picker);
+
+  setTimeout(() => {
+    const outsideCloser = (ev) => {
+      if (!picker.contains(ev.target)) {
+        picker.remove();
+        document.removeEventListener('pointerdown', outsideCloser);
+      }
+    };
+    document.addEventListener('pointerdown', outsideCloser);
+  }, 50);
 }
 
 async function toggleReaction(messageId, emoji, removing) {
+  if (!state.me) return;
+
+  const msg = state.messages.find(m => m.id === messageId);
+  if (!msg) return;
+  msg.message_reactions = msg.message_reactions || [];
+
+  // Instant UI update
+  if (removing) {
+    msg.message_reactions = msg.message_reactions.filter(
+      r => !(r.user_id === state.me.id && r.reaction === emoji)
+    );
+  } else {
+    msg.message_reactions.push({
+      id: 'temp-' + Date.now(),
+      message_id: messageId,
+      user_id: state.me.id,
+      reaction: emoji
+    });
+  }
+  renderMessages();
+
   try {
     if (removing) {
-      await supabaseClient.from('message_reactions').delete()
-        .eq('message_id', messageId).eq('user_id', state.me.id).eq('reaction', emoji);
+      const { error } = await supabaseClient
+        .from('message_reactions')
+        .delete()
+        .eq('message_id', messageId)
+        .eq('user_id', state.me.id)
+        .eq('reaction', emoji);
+      if (error) throw error;
     } else {
-      await supabaseClient.from('message_reactions').insert({ message_id: messageId, user_id: state.me.id, reaction: emoji });
+      const { data, error } = await supabaseClient
+        .from('message_reactions')
+        .insert({
+          message_id: messageId,
+          user_id: state.me.id,
+          reaction: emoji
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      const temp = msg.message_reactions.find(r => r.user_id === state.me.id && r.reaction === emoji);
+      if (temp && data) temp.id = data.id;
     }
   } catch (err) {
-    toast(friendlyError(err, 'Could not react to message'), 'error');
+    toast(friendlyError(err, 'Reaction failed'), 'error');
+    if (state.activeConversationId) await loadMessages(state.activeConversationId);
   }
 }
-
 function setReplyTarget(msg) {
   state.replyTarget = msg;
   $('reply-preview').hidden = false;
@@ -1055,9 +1111,20 @@ messageInput.addEventListener('input', () => {
   sendTypingSignal();
 });
 
-// Press Enter to Send, Shift+Enter for new line
+// Handles desktop Enter and mobile virtual keyboard keycodes
 messageInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  const isEnter = e.key === 'Enter' || e.keyCode === 13 || e.which === 13;
+  if (isEnter && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    if (messageInput.value.trim()) {
+      $('message-form').requestSubmit();
+    }
+  }
+});
+
+// Fallback for Android keyboards sending insertLineBreak action
+messageInput.addEventListener('beforeinput', (e) => {
+  if (e.inputType === 'insertLineBreak' && !e.shiftKey) {
     e.preventDefault();
     if (messageInput.value.trim()) {
       $('message-form').requestSubmit();
