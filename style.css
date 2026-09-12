@@ -451,3 +451,13 @@ img{ max-width:100%; display:block; }
 [hidden] {
   display: none !important;
 }
+/* Ensure message actions show or can be tapped easily on mobile */
+@media (max-width: 768px) {
+  .msg-row .msg-hover-actions {
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    position: relative;
+    margin-top: 4px;
+  }
+}
