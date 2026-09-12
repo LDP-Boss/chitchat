@@ -545,24 +545,6 @@ img{ max-width:100%; display:block; }
     font-size: 16px; /* Disables auto-zoom in mobile Chrome */
   }
 }
-/* Reaction bar styling */
-.msg-hover-actions {
-  display: flex !important;
-  align-items: center;
-  gap: 4px;
-  opacity: 1 !important;
-  visibility: visible !important;
-  pointer-events: auto !important;
-}
-
-.msg-hover-actions button {
-  background: var(--surface-2, #2a2a2a);
-  border: 1px solid var(--border, rgba(255,255,255,0.1));
-  border-radius: 6px;
-  padding: 4px 6px;
-  cursor: pointer;
-  font-size: 14px;
-}
 
 .reaction-picker {
   position: absolute;
