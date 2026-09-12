@@ -1294,6 +1294,9 @@ async function subscribeToPush() {
       return;
     }
 
+    // Explicitly register service-worker.js before requesting readiness
+    await navigator.serviceWorker.register('/service-worker.js');
+
     const registration = await navigator.serviceWorker.ready;
 
     let subscription = await registration.pushManager.getSubscription();
@@ -1364,6 +1367,7 @@ async function subscribeToPush() {
     );
   }
 }
+
 // ============================================================================
 // PROFILE / SETTINGS MODAL
 // ============================================================================
@@ -1448,6 +1452,11 @@ $('theme-toggle-btn').addEventListener('click', () => {
 // INIT
 // ============================================================================
 (function init() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/service-worker.js').catch((err) => {
+      console.warn('SW auto-registration failed:', err);
+    });
+  }
   initAppearance();
   buildAccentSwatches();
   buildEmojiPicker();
