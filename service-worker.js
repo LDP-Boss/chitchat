@@ -20,20 +20,22 @@ self.addEventListener("push", (event) => {
     };
   }
 
-  const title = data.title || "ChatBGM";
+  const isCall = (data.body || '').includes('call');
+  const title = data.title || (isCall ? "Incoming Call" : "ChatBGM");
+
   const options = {
     body: data.body || "You have a new message.",
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
-    vibrate: [200, 100, 200],
-    tag: "chat-msg-" + Date.now(),
+    vibrate: isCall ? [500, 250, 500, 250, 500, 250, 500] : [200, 100, 200],
+    tag: isCall ? "chat-call-alert" : ("chat-msg-" + Date.now()),
     renotify: true,
+    requireInteraction: isCall,
     data: {
       url: data.url || "/"
     }
   };
 
-  // Deliver the push notification directly without client-blocking drops
   event.waitUntil(
     self.registration.showNotification(title, options)
   );
