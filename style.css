@@ -486,7 +486,7 @@ img { max-width: 100%; display: block; }
 .chat-header-info { flex: 1; min-width: 0; }
 .chat-header-name { font-weight: 700; font-size: 15px; }
 .chat-header-status { font-size: 12.5px; color: var(--text-muted); }
-.chat-header-actions { display: flex; align-items: center; gap: 2px; }
+.chat-header-actions { display: flex; align-items: center; gap: 4px; }
 .mobile-only { display: none; }
 
 .menu-wrap { position: relative; }
@@ -1020,6 +1020,101 @@ img { max-width: 100%; display: block; }
   font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
+
+/* ============================== WEBRTC CALL OVERLAY ============================== */
+.call-overlay {
+  background: rgba(10, 12, 16, 0.94);
+  z-index: 350;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.call-card {
+  width: 100%;
+  max-width: 440px;
+  background: #171920;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 24px;
+  padding: 24px 20px;
+  text-align: center;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.6);
+  animation: toast-in 0.25s ease;
+}
+.call-header img {
+  margin: 0 auto 10px;
+  border: 2px solid var(--accent);
+}
+.call-header h3 {
+  margin: 4px 0;
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+.call-header p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.92rem;
+}
+.call-video-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: #000;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+#remote-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+#local-video {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 96px;
+  height: 128px;
+  border-radius: 12px;
+  border: 2px solid #fff;
+  object-fit: cover;
+  background: #1f2024;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+.call-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
+  width: 100%;
+}
+.call-btn {
+  border: none;
+  padding: 11px 22px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 14.5px;
+  cursor: pointer;
+  color: #fff;
+  transition: transform 0.12s ease, filter 0.12s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.call-btn:active { transform: scale(0.96); }
+.call-btn.accept { background: #22c55e; }
+.call-btn.accept:hover { filter: brightness(1.1); }
+.call-btn.ctrl { background: rgba(255, 255, 255, 0.15); }
+.call-btn.ctrl:hover { background: rgba(255, 255, 255, 0.22); }
+.call-btn.hangup { background: #ef4444; }
+.call-btn.hangup:hover { filter: brightness(1.1); }
 
 /* ============================== MODALS ============================== */
 .modal-overlay {
