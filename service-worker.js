@@ -39,12 +39,12 @@ self.addEventListener("push", (event) => {
       // Check if any tab running this app is currently open, visible, and focused
       const isAppActive = clientList.some((client) => client.visibilityState === "visible" && client.focused);
 
-      // If the user is actively inside the app, suppress the notification
+      // If the user is actively chatting inside the app, suppress the notification
       if (isAppActive) {
         return;
       }
 
-      // Tab is in background, minimized, locked, or closed -> show push notification
+      // Show notification if app is closed, locked, or backgrounded
       return self.registration.showNotification(title, options);
     })
   );
