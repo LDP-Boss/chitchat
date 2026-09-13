@@ -1231,18 +1231,36 @@ $('image-input').addEventListener('change', async (e) => {
 });
 
 // ---------------------------------------------------------------------------
-// VOICE NOTE RECORDER
+// VOICE NOTE RECORDER (CROSS-PLATFORM & SAFARI / CHROME COMPATIBLE)
 // ---------------------------------------------------------------------------
 let mediaRecorder = null;
 let audioChunks = [];
 let recordingInterval = null;
 let recordingSeconds = 0;
+let recordedMimeType = 'audio/webm';
 
 const voiceBtn = $('voice-record-btn');
 const recordingOverlay = $('recording-overlay');
 const recordingTimer = $('recording-timer');
 const cancelRecordBtn = $('cancel-record-btn');
 const stopSendRecordBtn = $('stop-send-record-btn');
+
+// Detect supported audio MIME type across iOS Safari and Android Chrome
+function getSupportedAudioMimeType() {
+  const types = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/aac',
+    'audio/ogg'
+  ];
+  for (const t of types) {
+    if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) {
+      return t;
+    }
+  }
+  return ''; // Browser default
+}
 
 voiceBtn.addEventListener('click', async () => {
   if (!state.activeConversationId) {
@@ -1252,20 +1270,23 @@ voiceBtn.addEventListener('click', async () => {
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaRecorder = new MediaRecorder(stream);
+    
+    recordedMimeType = getSupportedAudioMimeType();
+    const options = recordedMimeType ? { mimeType: recordedMimeType } : {};
+    
+    mediaRecorder = new MediaRecorder(stream, options);
     audioChunks = [];
     recordingSeconds = 0;
 
     mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) audioChunks.push(e.data);
+      if (e.data && e.data.size > 0) {
+        audioChunks.push(e.data);
+      }
     };
 
-    mediaRecorder.onstop = () => {
-      clearInterval(recordingInterval);
-      stream.getTracks().forEach(track => track.stop());
-    };
+    // Request data in chunks every 250ms so chunks are ready when stopped
+    mediaRecorder.start(250);
 
-    mediaRecorder.start();
     recordingOverlay.hidden = false;
     $('message-input').hidden = true;
 
@@ -1278,13 +1299,20 @@ voiceBtn.addEventListener('click', async () => {
     }, 1000);
 
   } catch (err) {
+    console.error('Microphone error:', err);
     toast('Microphone access denied or unavailable.', 'error');
   }
 });
 
+// Cancel recording
 cancelRecordBtn.addEventListener('click', () => {
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.ondataavailable = null;
+    mediaRecorder.onstop = null;
     mediaRecorder.stop();
+    if (mediaRecorder.stream) {
+      mediaRecorder.stream.getTracks().forEach(t => t.stop());
+    }
   }
   clearInterval(recordingInterval);
   recordingOverlay.hidden = true;
@@ -1292,7 +1320,8 @@ cancelRecordBtn.addEventListener('click', () => {
   audioChunks = [];
 });
 
-stopSendRecordBtn.addEventListener('click', async () => {
+// Stop and send voice note
+stopSendRecordBtn.addEventListener('click', () => {
   if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
 
   mediaRecorder.onstop = async () => {
@@ -1300,16 +1329,27 @@ stopSendRecordBtn.addEventListener('click', async () => {
     recordingOverlay.hidden = true;
     $('message-input').hidden = false;
 
-    if (audioChunks.length === 0) return;
-    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-    const storagePath = `${state.me.id}/voice-${Date.now()}.webm`;
+    // Release microphone hardware
+    if (mediaRecorder.stream) {
+      mediaRecorder.stream.getTracks().forEach(t => t.stop());
+    }
+
+    if (audioChunks.length === 0) {
+      toast('No audio recorded', 'error');
+      return;
+    }
+
+    const mime = recordedMimeType || 'audio/webm';
+    const ext = mime.includes('mp4') || mime.includes('aac') ? 'm4a' : 'webm';
+    const audioBlob = new Blob(audioChunks, { type: mime });
+    const storagePath = `${state.me.id}/voice-${Date.now()}.${ext}`;
 
     toast('Sending voice note…');
 
     try {
       const { error: uploadError } = await supabaseClient.storage
         .from('chat-media')
-        .upload(storagePath, audioBlob, { contentType: 'audio/webm', upsert: false });
+        .upload(storagePath, audioBlob, { contentType: mime, upsert: false });
 
       if (uploadError) throw uploadError;
 
@@ -1326,10 +1366,15 @@ stopSendRecordBtn.addEventListener('click', async () => {
       });
 
     } catch (err) {
+      console.error('Upload voice note error:', err);
       toast(friendlyError(err, 'Failed to send voice note'), 'error');
     }
   };
 
+  // Request any remaining audio buffer before triggering onstop
+  if (mediaRecorder.state === 'recording') {
+    mediaRecorder.requestData();
+  }
   mediaRecorder.stop();
 });
 
