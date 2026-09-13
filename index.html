@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>Chatbgm</title>
+<title>(: Chatbgm : )</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -194,7 +194,7 @@
           hidden 
         />
 
-        <!-- Voice recording state indicator -->
+        <!-- Voice recording state overlay -->
         <div id="recording-overlay" class="recording-overlay" hidden>
           <span class="rec-dot"></span>
           <span id="recording-timer">0:00</span>
@@ -228,7 +228,7 @@
       <!-- GIF PICKER MODAL -->
       <div id="gif-picker-modal" class="gif-picker-wrap" hidden>
         <div class="gif-picker-header">
-          <input type="text" id="gif-search-input" placeholder="Search GIFs via Giphy…" autocomplete="off">
+          <input type="text" id="gif-search-input" placeholder="Search GIFs…" autocomplete="off">
           <button type="button" id="close-gif-btn" class="icon-btn" aria-label="Close GIF picker">✕</button>
         </div>
         <div id="gif-results-grid" class="gif-grid"></div>
@@ -243,7 +243,10 @@
   <div class="camera-card">
     <div class="camera-header">
       <span id="camera-mode-label">Camera</span>
-      <button type="button" id="close-camera-btn" class="icon-btn">✕</button>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <button type="button" id="flip-camera-btn" class="icon-btn" title="Switch Camera" aria-label="Switch Camera">🔄</button>
+        <button type="button" id="close-camera-btn" class="icon-btn" aria-label="Close">✕</button>
+      </div>
     </div>
 
     <div class="camera-viewport">
