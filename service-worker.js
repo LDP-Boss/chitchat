@@ -36,15 +36,15 @@ self.addEventListener("push", (event) => {
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
-      // Check if any tab running this app is currently open, visible, and focused
-      const isAppActive = clientList.some((client) => client.visibilityState === "visible" && client.focused);
+      // Check if the user is STRICTLY focused on the tab right now
+      const isCurrentlyFocused = clientList.some((client) => Boolean(client.focused));
 
-      // If the user is actively chatting inside the app, suppress the notification
-      if (isAppActive) {
+      // If the user is actively typing/focused inside the window, suppress the notification
+      if (isCurrentlyFocused) {
         return;
       }
 
-      // Show notification if app is closed, locked, or backgrounded
+      // If minimized, in another tab, screen locked, or closed -> show notification
       return self.registration.showNotification(title, options);
     })
   );
