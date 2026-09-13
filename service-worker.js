@@ -25,9 +25,8 @@ self.addEventListener("push", (event) => {
     body: data.body || "You have a new message.",
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
-    // Crucial for Android 8 / MIUI lock screen wake:
     vibrate: [300, 150, 300, 150, 300],
-    tag: "chat-msg-" + Date.now(), // Force unique alert instead of collapsing
+    tag: "chat-msg-" + Date.now(),
     renotify: true,
     requireInteraction: false,
     data: {
@@ -36,7 +35,18 @@ self.addEventListener("push", (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(title, options)
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      // Check if any tab running this app is currently open, visible, and focused
+      const isAppActive = clientList.some((client) => client.visibilityState === "visible" && client.focused);
+
+      // If the user is actively inside the app, suppress the notification
+      if (isAppActive) {
+        return;
+      }
+
+      // Tab is in background, minimized, locked, or closed -> show push notification
+      return self.registration.showNotification(title, options);
+    })
   );
 });
 
@@ -46,7 +56,7 @@ self.addEventListener("notificationclick", (event) => {
   const url = event.notification?.data?.url || "/";
 
   event.waitUntil(
-    clients.matchAll({ type: "window", includeUncontrolled: true })
+    self.clients.matchAll({ type: "window", includeUncontrolled: true })
       .then((clientList) => {
         for (const client of clientList) {
           if ("focus" in client) {
@@ -54,7 +64,7 @@ self.addEventListener("notificationclick", (event) => {
             return client.focus();
           }
         }
-        return clients.openWindow(url);
+        return self.clients.openWindow(url);
       })
   );
 });
