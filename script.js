@@ -36,7 +36,7 @@ const state = {
 
 const REACTIONS = ['❤️', '😂', '👍', '😮', '😢', '🔥'];
 const ACCENTS = ['#3E5C76', '#B3541E', '#3E7C59', '#7C3E76', '#8A6D3B', '#3E76B3'];
-const GIPHY_API_KEY = 'dc6zaTOxFJmzC';
+const GIPHY_API_KEY = 'q0S1zwFZBSQSWzzE7GnoFqQh23gJbz8C';
 
 // ---------------------------------------------------------------------------
 // DOM SHORTCUTS
