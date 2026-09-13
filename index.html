@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>(: Chatbgm : )</title>
+<title>Chatbgm</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -183,6 +183,7 @@
         <button id="reply-preview-cancel" class="icon-btn" aria-label="Cancel reply">✕</button>
       </div>
 
+      <!-- MESSAGE COMPOSER -->
       <form id="message-form" class="message-form">
         <button type="button" id="attach-btn" class="icon-btn" title="Attach file" aria-label="Attach file">📎</button>
         <input 
@@ -192,16 +193,78 @@
           accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" 
           hidden 
         />
-        <textarea id="message-input" placeholder="Message…"  maxlength="4000" enterkeyhint="send"></textarea>
+
+        <!-- Voice recording state indicator -->
+        <div id="recording-overlay" class="recording-overlay" hidden>
+          <span class="rec-dot"></span>
+          <span id="recording-timer">0:00</span>
+          <button type="button" id="cancel-record-btn" class="rec-cancel-btn">Cancel</button>
+          <button type="button" id="stop-send-record-btn" class="rec-send-btn">Send</button>
+        </div>
+
+        <textarea id="message-input" placeholder="Message…" maxlength="4000" enterkeyhint="send"></textarea>
+        
+        <!-- Camera Button -->
+        <button type="button" id="camera-btn" class="icon-btn" title="Take photo or video" aria-label="Take photo or video">📷</button>
+
+        <!-- Voice Note Mic Button -->
+        <button type="button" id="voice-record-btn" class="icon-btn" title="Record voice note" aria-label="Record voice note">🎙️</button>
+
+        <!-- GIF Picker Toggle Button -->
+        <button type="button" id="gif-toggle-btn" class="icon-btn" title="Send GIF" aria-label="Send GIF">
+          <span style="font-weight: 700; font-size: 11px; border: 1.5px solid currentColor; border-radius: 4px; padding: 1px 3px;">GIF</span>
+        </button>
+
         <button type="button" id="emoji-btn" class="icon-btn" title="Insert emoji" aria-label="Insert emoji">😊</button>
         <button type="submit" id="send-btn" class="icon-btn send-btn" title="Send" aria-label="Send message">
           <span class="btn-label">➤</span>
           <span class="btn-spinner" hidden></span>
         </button>
       </form>
+
+      <!-- EMOJI PICKER -->
       <div id="emoji-picker" class="emoji-picker" hidden></div>
+
+      <!-- GIF PICKER MODAL -->
+      <div id="gif-picker-modal" class="gif-picker-wrap" hidden>
+        <div class="gif-picker-header">
+          <input type="text" id="gif-search-input" placeholder="Search GIFs via Giphy…" autocomplete="off">
+          <button type="button" id="close-gif-btn" class="icon-btn" aria-label="Close GIF picker">✕</button>
+        </div>
+        <div id="gif-results-grid" class="gif-grid"></div>
+      </div>
+
     </div>
   </main>
+</div>
+
+<!-- ============================== IN-APP CAMERA MODAL ============================== -->
+<div id="camera-modal" class="modal-overlay" hidden>
+  <div class="camera-card">
+    <div class="camera-header">
+      <span id="camera-mode-label">Camera</span>
+      <button type="button" id="close-camera-btn" class="icon-btn">✕</button>
+    </div>
+
+    <div class="camera-viewport">
+      <video id="camera-video" playsinline autoplay muted></video>
+      <canvas id="camera-canvas" hidden></canvas>
+    </div>
+
+    <div class="camera-controls">
+      <div class="camera-modes">
+        <button type="button" id="mode-photo-btn" class="cam-tab active">Photo</button>
+        <button type="button" id="mode-video-btn" class="cam-tab">Video</button>
+      </div>
+
+      <div class="camera-shutter-wrap">
+        <button type="button" id="shutter-photo-btn" class="shutter-btn photo-btn" title="Capture Photo"></button>
+        <button type="button" id="shutter-video-btn" class="shutter-btn video-btn" title="Record Video" hidden></button>
+      </div>
+
+      <span id="camera-timer" class="camera-timer" hidden>0:00</span>
+    </div>
+  </div>
 </div>
 
 <!-- ============================== PROFILE / SETTINGS MODAL ============================== -->
