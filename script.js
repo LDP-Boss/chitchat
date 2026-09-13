@@ -1030,11 +1030,15 @@ $('close-image-preview-btn').addEventListener('click', () => { $('image-preview-
 $('image-preview-modal').addEventListener('click', (e) => { if (e.target === $('image-preview-modal')) $('image-preview-modal').hidden = true; });
 
 // ---------------------------------------------------------------------------
-// REALTIME: MESSAGES & TYPING
+// REALTIME: MESSAGES, TYPING & WEBRTC CALL SIGNALING
 // ---------------------------------------------------------------------------
 function subscribeToConversation(conversationId) {
   const channel = supabaseClient
     .channel(`conv:${conversationId}`)
+    // WebRTC signaling listener for P2P audio/video calls
+    .on('broadcast', { event: 'webrtc_signal' }, ({ payload }) => {
+      handleIncomingWebRTCSignal(payload);
+    })
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` }, (payload) => {
       if (state.messages.some(m => m.id === payload.new.id)) return;
       state.messages.push({ ...payload.new, message_reactions: [], message_reads: [] });
@@ -1322,7 +1326,6 @@ stopSendRecordBtn.addEventListener('click', async () => {
   clearInterval(recordingInterval);
   const duration = recordingSeconds;
 
-  // Use a Promise to guarantee the final audio chunks have flushed into audioChunks array
   const audioBlob = await new Promise((resolve) => {
     mediaRecorder.onstop = () => {
       if (mediaRecorder.stream) {
@@ -1383,6 +1386,7 @@ stopSendRecordBtn.addEventListener('click', async () => {
     toast(friendlyError(err, 'Failed to send voice note'), 'error');
   }
 });
+
 // ---------------------------------------------------------------------------
 // GIPHY API (INTEGRATED)
 // ---------------------------------------------------------------------------
@@ -1472,7 +1476,7 @@ let recordedVideoChunks = [];
 let cameraTimerInterval = null;
 let cameraSeconds = 0;
 let currentCameraMode = 'photo';
-let currentFacingMode = 'user'; // 'user' (front) or 'environment' (back)
+let currentFacingMode = 'user';
 
 const cameraModal = $('camera-modal');
 const cameraVideo = $('camera-video');
@@ -1661,6 +1665,207 @@ shutterVideoBtn.addEventListener('click', () => {
     const s = cameraSeconds % 60;
     cameraTimer.textContent = `${m}:${s < 10 ? '0' : ''}${s}`;
   }, 1000);
+});
+
+// ---------------------------------------------------------------------------
+// WEBRTC CALLING (AUDIO & VIDEO VIA SUPABASE REALTIME SIGNALING)
+// ---------------------------------------------------------------------------
+const rtcConfig = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
+  ]
+};
+
+let peerConnection = null;
+let localCallStream = null;
+let callType = 'audio';
+let activeCallSenderId = null;
+
+const callModal = $('call-modal');
+const callAvatar = $('call-avatar');
+const callUserName = $('call-user-name');
+const callStatus = $('call-status');
+const callVideoContainer = $('call-video-container');
+const localVideo = $('local-video');
+const remoteVideo = $('remote-video');
+const remoteAudio = $('remote-audio');
+const acceptCallBtn = $('accept-call-btn');
+const toggleMicBtn = $('toggle-mic-btn');
+const endCallBtn = $('end-call-btn');
+
+$('start-audio-call-btn').addEventListener('click', () => initiateCall('audio'));
+$('start-video-call-btn').addEventListener('click', () => initiateCall('video'));
+
+async function initiateCall(type) {
+  if (!state.activeConversationId || !state.activeOtherUser) {
+    toast('Select a chat to call', 'error');
+    return;
+  }
+  callType = type;
+  activeCallSenderId = state.me.id;
+
+  setupCallUI(state.activeOtherUser, `Calling (${type})…`);
+  acceptCallBtn.hidden = true;
+  toggleMicBtn.hidden = false;
+
+  try {
+    await setupLocalStream(type);
+    createPeerConnection();
+
+    localCallStream.getTracks().forEach(track => {
+      peerConnection.addTrack(track, localCallStream);
+    });
+
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+
+    sendCallSignal('call_offer', {
+      offer,
+      callType,
+      caller: state.me
+    });
+  } catch (err) {
+    console.error('Call initiation error:', err);
+    toast('Could not access microphone/camera for call', 'error');
+    closeCall();
+  }
+}
+
+function sendCallSignal(event, payload) {
+  if (!state.messageChannel) return;
+  state.messageChannel.send({
+    type: 'broadcast',
+    event: 'webrtc_signal',
+    payload: { subEvent: event, ...payload, from: state.me.id }
+  });
+}
+
+async function setupLocalStream(type) {
+  if (localCallStream) {
+    localCallStream.getTracks().forEach(t => t.stop());
+  }
+
+  localCallStream = await navigator.mediaDevices.getUserMedia({
+    audio: true,
+    video: type === 'video'
+  });
+
+  if (type === 'video') {
+    callVideoContainer.hidden = false;
+    localVideo.srcObject = localCallStream;
+  } else {
+    callVideoContainer.hidden = true;
+  }
+}
+
+function createPeerConnection() {
+  if (peerConnection) {
+    peerConnection.close();
+  }
+
+  peerConnection = new RTCPeerConnection(rtcConfig);
+
+  peerConnection.onicecandidate = (e) => {
+    if (e.candidate) {
+      sendCallSignal('ice_candidate', { candidate: e.candidate });
+    }
+  };
+
+  peerConnection.ontrack = (e) => {
+    if (callType === 'video') {
+      remoteVideo.srcObject = e.streams[0];
+    } else {
+      remoteAudio.srcObject = e.streams[0];
+    }
+    callStatus.textContent = 'Connected';
+  };
+
+  peerConnection.onconnectionstatechange = () => {
+    if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
+      closeCall();
+    }
+  };
+}
+
+function setupCallUI(user, statusText) {
+  callAvatar.src = avatarUrl(user);
+  callUserName.textContent = user.display_name || 'User';
+  callStatus.textContent = statusText;
+  callModal.hidden = false;
+}
+
+function handleIncomingWebRTCSignal(data) {
+  if (!data || data.from === state.me.id) return;
+
+  if (data.subEvent === 'call_offer') {
+    callType = data.callType;
+    activeCallSenderId = data.from;
+    setupCallUI(data.caller, `Incoming ${data.callType} call…`);
+    acceptCallBtn.hidden = false;
+    toggleMicBtn.hidden = true;
+
+    acceptCallBtn.onclick = async () => {
+      acceptCallBtn.hidden = true;
+      toggleMicBtn.hidden = false;
+      callStatus.textContent = 'Connecting…';
+
+      try {
+        await setupLocalStream(callType);
+        createPeerConnection();
+
+        localCallStream.getTracks().forEach(track => {
+          peerConnection.addTrack(track, localCallStream);
+        });
+
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+
+        sendCallSignal('call_answer', { answer });
+      } catch (err) {
+        console.error('Call accept failed:', err);
+        toast('Failed to connect call', 'error');
+        closeCall();
+      }
+    };
+  } else if (data.subEvent === 'call_answer' && peerConnection) {
+    peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer)).catch(console.error);
+  } else if (data.subEvent === 'ice_candidate' && peerConnection) {
+    peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(() => {});
+  } else if (data.subEvent === 'call_end') {
+    toast('Call ended', 'default');
+    closeCall();
+  }
+}
+
+function closeCall() {
+  if (peerConnection) {
+    peerConnection.close();
+    peerConnection = null;
+  }
+  if (localCallStream) {
+    localCallStream.getTracks().forEach(t => t.stop());
+    localCallStream = null;
+  }
+  callModal.hidden = true;
+  callVideoContainer.hidden = true;
+  acceptCallBtn.hidden = true;
+  toggleMicBtn.hidden = true;
+}
+
+endCallBtn.addEventListener('click', () => {
+  sendCallSignal('call_end', {});
+  closeCall();
+});
+
+toggleMicBtn.addEventListener('click', () => {
+  if (!localCallStream) return;
+  const audioTrack = localCallStream.getAudioTracks()[0];
+  if (audioTrack) {
+    audioTrack.enabled = !audioTrack.enabled;
+    toggleMicBtn.textContent = audioTrack.enabled ? '🎤 Mute' : '🔇 Unmute';
+  }
 });
 
 // ---------------------------------------------------------------------------
