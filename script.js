@@ -36,6 +36,7 @@ const state = {
 
 const REACTIONS = ['❤️', '😂', '👍', '😮', '😢', '🔥'];
 const ACCENTS = ['#3E5C76', '#B3541E', '#3E7C59', '#7C3E76', '#8A6D3B', '#3E76B3'];
+const GIPHY_API_KEY = 'dc6zaTOxFJmzC';
 
 // ---------------------------------------------------------------------------
 // DOM SHORTCUTS
@@ -45,7 +46,7 @@ const qs = (sel, root = document) => root.querySelector(sel);
 const qsa = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
 // ---------------------------------------------------------------------------
-// TOASTS
+// TOASTS & ERRORS
 // ---------------------------------------------------------------------------
 function toast(message, type = 'default', duration = 3200) {
   const stack = $('toast-stack');
@@ -161,10 +162,9 @@ function debounce(fn, ms) {
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 }
 
-// ============================================================================
-// AUTH
-// ============================================================================
-
+// ---------------------------------------------------------------------------
+// AUTHENTICATION
+// ---------------------------------------------------------------------------
 function showAuthError(el, err) {
   el.textContent = friendlyError(err);
 }
@@ -268,10 +268,9 @@ async function initAuth() {
   }
 }
 
-// ============================================================================
-// APP BOOT / TEARDOWN
-// ============================================================================
-
+// ---------------------------------------------------------------------------
+// APP BOOT & TEARDOWN
+// ---------------------------------------------------------------------------
 let appBooted = false;
 
 async function bootApp() {
@@ -332,10 +331,9 @@ function renderMyAvatar() {
   $('my-avatar').alt = state.me.display_name;
 }
 
-// ============================================================================
+// ---------------------------------------------------------------------------
 // PRESENCE
-// ============================================================================
-
+// ---------------------------------------------------------------------------
 async function setPresence(online) {
   if (!state.me) return;
   try {
@@ -408,10 +406,9 @@ function refreshOnlineIndicators() {
   if (state.activeOtherUser) renderChatHeaderStatus();
 }
 
-// ============================================================================
+// ---------------------------------------------------------------------------
 // CONVERSATIONS
-// ============================================================================
-
+// ---------------------------------------------------------------------------
 async function loadConversations() {
   $('conversations-loading').hidden = false;
   $('conversations-empty').hidden = true;
@@ -513,6 +510,7 @@ function renderConversationList() {
       ? (conv.lastMessage.is_deleted ? 'This message was deleted'
         : conv.lastMessage.message_type === 'image' ? '📷 Photo'
         : conv.lastMessage.message_type === 'video' ? '🎥 Video'
+        : conv.lastMessage.message_type === 'audio' ? '🎙️ Voice note'
         : conv.lastMessage.message_type === 'file' ? '📁 Attachment'
         : conv.lastMessage.content)
       : 'Say hello 👋';
@@ -629,10 +627,9 @@ async function startConversationWith(user) {
   }
 }
 
-// ============================================================================
+// ---------------------------------------------------------------------------
 // ACTIVE CONVERSATION & MESSAGES
-// ============================================================================
-
+// ---------------------------------------------------------------------------
 function cleanupActiveConversationChannels() {
   if (state.messageChannel) { supabaseClient.removeChannel(state.messageChannel); state.messageChannel = null; }
   if (state.typingChannel) { supabaseClient.removeChannel(state.typingChannel); state.typingChannel = null; }
@@ -694,7 +691,7 @@ $('back-to-list-btn').addEventListener('click', () => {
   $('app-shell').classList.remove('mobile-chat-open');
 });
 
-// OPPOSITE USER PROFILE OPEN/CLOSE
+// OPPOSITE USER PROFILE MODAL
 $('chat-header-user-btn').addEventListener('click', () => {
   if (!state.activeOtherUser) return;
   $('other-avatar').src = avatarUrl(state.activeOtherUser);
@@ -798,11 +795,13 @@ function renderMessageRow(msg, grouped) {
 
     if (msg.message_type === 'image' && msg.media_url) {
       inner += `<img class="msg-image" src="${msg.media_url}" alt="Photo" />`;
-      if (msg.content) inner += `<div style="padding:6px 4px 2px;">${escapeHtml(msg.content)}</div>`;
+      if (msg.content && msg.content !== 'GIF') inner += `<div style="padding:6px 4px 2px;">${escapeHtml(msg.content)}</div>`;
     } else if (msg.message_type === 'video' && msg.media_url) {
-      inner += `<video controls class="msg-video" style="max-width:100%; border-radius:8px;" src="${msg.media_url}"></video>`;
+      inner += `<video controls playsinline class="msg-video" style="max-width:100%; border-radius:8px;" src="${msg.media_url}"></video>`;
+      if (msg.content) inner += `<div style="padding:4px 2px; font-size:12px; opacity:0.8;">${escapeHtml(msg.content)}</div>`;
     } else if (msg.message_type === 'audio' && msg.media_url) {
-      inner += `<audio controls style="width:100%;" src="${msg.media_url}"></audio>`;
+      inner += `<audio controls style="max-width: 240px; height: 36px;" src="${msg.media_url}"></audio>`;
+      if (msg.content) inner += `<div style="padding:2px 4px; font-size:11px; opacity:0.75;">${escapeHtml(msg.content)}</div>`;
     } else if (msg.message_type === 'file' && msg.media_url) {
       inner += `<a href="${msg.media_url}" target="_blank" download style="display:flex; align-items:center; gap:8px; text-decoration:underline; word-break:break-all;">
                   📁 <span>${escapeHtml(msg.content || 'Download Attachment')}</span>
@@ -916,7 +915,6 @@ async function toggleReaction(messageId, emoji, removing) {
   if (!msg) return;
   msg.message_reactions = msg.message_reactions || [];
 
-  // Instant UI update
   if (removing) {
     msg.message_reactions = msg.message_reactions.filter(
       r => !(r.user_id === state.me.id && r.reaction === emoji)
@@ -959,6 +957,7 @@ async function toggleReaction(messageId, emoji, removing) {
     if (state.activeConversationId) await loadMessages(state.activeConversationId);
   }
 }
+
 function setReplyTarget(msg) {
   state.replyTarget = msg;
   $('reply-preview').hidden = false;
@@ -1021,7 +1020,7 @@ $('close-image-preview-btn').addEventListener('click', () => { $('image-preview-
 $('image-preview-modal').addEventListener('click', (e) => { if (e.target === $('image-preview-modal')) $('image-preview-modal').hidden = true; });
 
 // ---------------------------------------------------------------------------
-// REALTIME: messages, typing
+// REALTIME: MESSAGES & TYPING
 // ---------------------------------------------------------------------------
 function subscribeToConversation(conversationId) {
   const channel = supabaseClient
@@ -1101,17 +1100,15 @@ async function markConversationRead(conversationId) {
   } catch (_) {}
 }
 
-// ============================================================================
-// SENDING MESSAGES (ENTER TO SEND)
-// ============================================================================
-
+// ---------------------------------------------------------------------------
+// MESSAGE COMPOSER & SENDING
+// ---------------------------------------------------------------------------
 const messageInput = $('message-input');
 messageInput.addEventListener('input', () => {
   autoResize(messageInput);
   sendTypingSignal();
 });
 
-// Handles desktop Enter and mobile virtual keyboard keycodes
 messageInput.addEventListener('keydown', (e) => {
   const isEnter = e.key === 'Enter' || e.keyCode === 13 || e.which === 13;
   if (isEnter && !e.shiftKey && !e.isComposing) {
@@ -1122,7 +1119,6 @@ messageInput.addEventListener('keydown', (e) => {
   }
 });
 
-// Fallback for Android keyboards sending insertLineBreak action
 messageInput.addEventListener('beforeinput', (e) => {
   if (e.inputType === 'insertLineBreak' && !e.shiftKey) {
     e.preventDefault();
@@ -1170,7 +1166,7 @@ $('message-form').addEventListener('submit', async (e) => {
 });
 
 // ---------------------------------------------------------------------------
-// MULTIPLE FILE UPLOADS (IMAGES, VIDEOS, AUDIO, DOCUMENTS)
+// FILE ATTACHMENTS
 // ---------------------------------------------------------------------------
 $('attach-btn').addEventListener('click', () => $('image-input').click());
 $('image-input').addEventListener('change', async (e) => {
@@ -1225,6 +1221,352 @@ $('image-input').addEventListener('change', async (e) => {
 });
 
 // ---------------------------------------------------------------------------
+// VOICE NOTE RECORDER
+// ---------------------------------------------------------------------------
+let mediaRecorder = null;
+let audioChunks = [];
+let recordingInterval = null;
+let recordingSeconds = 0;
+
+const voiceBtn = $('voice-record-btn');
+const recordingOverlay = $('recording-overlay');
+const recordingTimer = $('recording-timer');
+const cancelRecordBtn = $('cancel-record-btn');
+const stopSendRecordBtn = $('stop-send-record-btn');
+
+voiceBtn.addEventListener('click', async () => {
+  if (!state.activeConversationId) {
+    toast('Select a chat to send a voice note', 'error');
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    recordingSeconds = 0;
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = () => {
+      clearInterval(recordingInterval);
+      stream.getTracks().forEach(track => track.stop());
+    };
+
+    mediaRecorder.start();
+    recordingOverlay.hidden = false;
+    $('message-input').hidden = true;
+
+    recordingTimer.textContent = '0:00';
+    recordingInterval = setInterval(() => {
+      recordingSeconds++;
+      const m = Math.floor(recordingSeconds / 60);
+      const s = recordingSeconds % 60;
+      recordingTimer.textContent = `${m}:${s < 10 ? '0' : ''}${s}`;
+    }, 1000);
+
+  } catch (err) {
+    toast('Microphone access denied or unavailable.', 'error');
+  }
+});
+
+cancelRecordBtn.addEventListener('click', () => {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+  clearInterval(recordingInterval);
+  recordingOverlay.hidden = true;
+  $('message-input').hidden = false;
+  audioChunks = [];
+});
+
+stopSendRecordBtn.addEventListener('click', async () => {
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+
+  mediaRecorder.onstop = async () => {
+    clearInterval(recordingInterval);
+    recordingOverlay.hidden = true;
+    $('message-input').hidden = false;
+
+    if (audioChunks.length === 0) return;
+    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+    const storagePath = `${state.me.id}/voice-${Date.now()}.webm`;
+
+    toast('Sending voice note…');
+
+    try {
+      const { error: uploadError } = await supabaseClient.storage
+        .from('chat-media')
+        .upload(storagePath, audioBlob, { contentType: 'audio/webm', upsert: false });
+
+      if (uploadError) throw uploadError;
+
+      const { data: pub } = supabaseClient.storage
+        .from('chat-media')
+        .getPublicUrl(storagePath);
+
+      await supabaseClient.from('messages').insert({
+        conversation_id: state.activeConversationId,
+        sender_id: state.me.id,
+        message_type: 'audio',
+        media_url: pub.publicUrl,
+        content: `Voice note (${recordingSeconds}s)`
+      });
+
+    } catch (err) {
+      toast(friendlyError(err, 'Failed to send voice note'), 'error');
+    }
+  };
+
+  mediaRecorder.stop();
+});
+
+// ---------------------------------------------------------------------------
+// GIPHY PICKER
+// ---------------------------------------------------------------------------
+const gifModal = $('gif-picker-modal');
+const gifBtn = $('gif-toggle-btn');
+const gifSearch = $('gif-search-input');
+const gifGrid = $('gif-results-grid');
+
+gifBtn.addEventListener('click', () => {
+  gifModal.hidden = !gifModal.hidden;
+  if (!gifModal.hidden) {
+    fetchGifs('');
+    gifSearch.focus();
+  }
+});
+
+$('close-gif-btn').addEventListener('click', () => {
+  gifModal.hidden = true;
+});
+
+gifSearch.addEventListener('input', debounce((e) => {
+  fetchGifs(e.target.value.trim());
+}, 400));
+
+async function fetchGifs(query) {
+  gifGrid.innerHTML = '<div style="grid-column: span 2; text-align:center; color:var(--text-muted); padding:20px 0;">Loading GIFs…</div>';
+  try {
+    const endpoint = query
+      ? `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(query)}&limit=16&rating=g`
+      : `https://api.giphy.com/v1/gifs/trending?api_key=${GIPHY_API_KEY}&limit=16&rating=g`;
+
+    const res = await fetch(endpoint);
+    const { data } = await res.json();
+
+    gifGrid.innerHTML = '';
+    if (!data || data.length === 0) {
+      gifGrid.innerHTML = '<div style="grid-column: span 2; text-align:center; color:var(--text-muted); padding:20px 0;">No GIFs found</div>';
+      return;
+    }
+
+    data.forEach(item => {
+      const imgUrl = item.images.fixed_height_small.url;
+      const fullUrl = item.images.original.url;
+
+      const img = document.createElement('img');
+      img.src = imgUrl;
+      img.loading = 'lazy';
+      img.addEventListener('click', () => sendGif(fullUrl));
+      gifGrid.appendChild(img);
+    });
+  } catch (err) {
+    gifGrid.innerHTML = '<div style="grid-column: span 2; text-align:center; color:var(--text-muted); padding:20px 0;">Failed to load GIFs</div>';
+  }
+}
+
+async function sendGif(gifUrl) {
+  if (!state.activeConversationId) return;
+  gifModal.hidden = true;
+
+  try {
+    await supabaseClient.from('messages').insert({
+      conversation_id: state.activeConversationId,
+      sender_id: state.me.id,
+      message_type: 'image',
+      media_url: gifUrl,
+      content: 'GIF'
+    });
+  } catch (err) {
+    toast(friendlyError(err, 'Failed to send GIF'), 'error');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// IN-APP CAMERA: PHOTO & VIDEO CAPTURE
+// ---------------------------------------------------------------------------
+let cameraStream = null;
+let videoRecorder = null;
+let recordedVideoChunks = [];
+let cameraTimerInterval = null;
+let cameraSeconds = 0;
+let currentCameraMode = 'photo';
+
+const cameraModal = $('camera-modal');
+const cameraVideo = $('camera-video');
+const cameraCanvas = $('camera-canvas');
+const cameraBtn = $('camera-btn');
+const closeCameraBtn = $('close-camera-btn');
+const modePhotoBtn = $('mode-photo-btn');
+const modeVideoBtn = $('mode-video-btn');
+const shutterPhotoBtn = $('shutter-photo-btn');
+const shutterVideoBtn = $('shutter-video-btn');
+const cameraTimer = $('camera-timer');
+
+cameraBtn.addEventListener('click', async () => {
+  if (!state.activeConversationId) {
+    toast('Select a chat first', 'error');
+    return;
+  }
+  await startCamera();
+});
+
+async function startCamera() {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: true
+    });
+    cameraVideo.srcObject = cameraStream;
+    cameraModal.hidden = false;
+    setCameraMode('photo');
+  } catch (err) {
+    toast('Could not access camera or microphone', 'error');
+  }
+}
+
+function stopCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(track => track.stop());
+    cameraStream = null;
+  }
+  if (videoRecorder && videoRecorder.state !== 'inactive') {
+    videoRecorder.stop();
+  }
+  clearInterval(cameraTimerInterval);
+  cameraModal.hidden = true;
+  shutterVideoBtn.classList.remove('recording');
+  cameraTimer.hidden = true;
+}
+
+closeCameraBtn.addEventListener('click', stopCamera);
+
+modePhotoBtn.addEventListener('click', () => setCameraMode('photo'));
+modeVideoBtn.addEventListener('click', () => setCameraMode('video'));
+
+function setCameraMode(mode) {
+  currentCameraMode = mode;
+  modePhotoBtn.classList.toggle('active', mode === 'photo');
+  modeVideoBtn.classList.toggle('active', mode === 'video');
+  shutterPhotoBtn.hidden = mode !== 'photo';
+  shutterVideoBtn.hidden = mode !== 'video';
+  cameraTimer.hidden = true;
+}
+
+shutterPhotoBtn.addEventListener('click', () => {
+  if (!cameraStream) return;
+
+  cameraCanvas.width = cameraVideo.videoWidth || 640;
+  cameraCanvas.height = cameraVideo.videoHeight || 480;
+  const ctx = cameraCanvas.getContext('2d');
+  ctx.drawImage(cameraVideo, 0, 0, cameraCanvas.width, cameraCanvas.height);
+
+  cameraCanvas.toBlob(async (blob) => {
+    stopCamera();
+    if (!blob) return;
+
+    toast('Sending photo…');
+    const path = `${state.me.id}/photo-${Date.now()}.jpg`;
+
+    try {
+      const { error: uploadError } = await supabaseClient.storage
+        .from('chat-media')
+        .upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+
+      if (uploadError) throw uploadError;
+
+      const { data: pub } = supabaseClient.storage.from('chat-media').getPublicUrl(path);
+
+      await supabaseClient.from('messages').insert({
+        conversation_id: state.activeConversationId,
+        sender_id: state.me.id,
+        message_type: 'image',
+        media_url: pub.publicUrl,
+        content: ''
+      });
+    } catch (err) {
+      toast(friendlyError(err, 'Failed to send photo'), 'error');
+    }
+  }, 'image/jpeg', 0.88);
+});
+
+shutterVideoBtn.addEventListener('click', () => {
+  if (!cameraStream) return;
+
+  if (videoRecorder && videoRecorder.state === 'recording') {
+    videoRecorder.stop();
+    return;
+  }
+
+  recordedVideoChunks = [];
+  videoRecorder = new MediaRecorder(cameraStream, { mimeType: 'video/webm' });
+
+  videoRecorder.ondataavailable = (e) => {
+    if (e.data.size > 0) recordedVideoChunks.push(e.data);
+  };
+
+  videoRecorder.onstop = async () => {
+    clearInterval(cameraTimerInterval);
+    shutterVideoBtn.classList.remove('recording');
+    cameraTimer.hidden = true;
+
+    const videoBlob = new Blob(recordedVideoChunks, { type: 'video/webm' });
+    stopCamera();
+
+    if (videoBlob.size === 0) return;
+
+    toast('Sending video clip…');
+    const path = `${state.me.id}/video-${Date.now()}.webm`;
+
+    try {
+      const { error: uploadError } = await supabaseClient.storage
+        .from('chat-media')
+        .upload(path, videoBlob, { contentType: 'video/webm', upsert: false });
+
+      if (uploadError) throw uploadError;
+
+      const { data: pub } = supabaseClient.storage.from('chat-media').getPublicUrl(path);
+
+      await supabaseClient.from('messages').insert({
+        conversation_id: state.activeConversationId,
+        sender_id: state.me.id,
+        message_type: 'video',
+        media_url: pub.publicUrl,
+        content: `Video clip (${cameraSeconds}s)`
+      });
+    } catch (err) {
+      toast(friendlyError(err, 'Failed to send video'), 'error');
+    }
+  };
+
+  videoRecorder.start();
+  shutterVideoBtn.classList.add('recording');
+  cameraSeconds = 0;
+  cameraTimer.textContent = '0:00';
+  cameraTimer.hidden = false;
+
+  cameraTimerInterval = setInterval(() => {
+    cameraSeconds++;
+    const m = Math.floor(cameraSeconds / 60);
+    const s = cameraSeconds % 60;
+    cameraTimer.textContent = `${m}:${s < 10 ? '0' : ''}${s}`;
+  }, 1000);
+});
+
+// ---------------------------------------------------------------------------
 // EMOJI PICKER
 // ---------------------------------------------------------------------------
 const COMPOSER_EMOJIS = ['😀','😂','😍','😊','😉','😢','😮','😡','👍','👎','🙏','🔥','🎉','❤️','💯','👏','🤔','😴','😎','🥳','😅','🤝','👀','✨','🥰','🥺','😘','🫂','🤗'];
@@ -1247,9 +1589,9 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('#emoji-picker') && e.target.id !== 'emoji-btn') $('emoji-picker').hidden = true;
 });
 
-// ============================================================================
+// ---------------------------------------------------------------------------
 // MESSAGE SEARCH
-// ============================================================================
+// ---------------------------------------------------------------------------
 $('toggle-msg-search-btn').addEventListener('click', () => {
   const bar = $('msg-search-bar');
   bar.hidden = !bar.hidden;
@@ -1268,9 +1610,9 @@ $('msg-search-input').addEventListener('input', debounce((e) => {
   if (firstMatch) firstMatch.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }, 200));
 
-// ============================================================================
-// CHAT MENU: pin / mute / delete conversation
-// ============================================================================
+// ---------------------------------------------------------------------------
+// CHAT MENU: PIN / MUTE / DELETE
+// ---------------------------------------------------------------------------
 $('chat-menu-btn').addEventListener('click', (e) => {
   e.stopPropagation();
   $('chat-menu').hidden = !$('chat-menu').hidden;
@@ -1343,10 +1685,9 @@ async function deleteConversation(conv) {
   }
 }
 
-// ============================================================================
-// PUSH NOTIFICATIONS
-// ============================================================================
-
+// ---------------------------------------------------------------------------
+// PUSH NOTIFICATIONS SUBSCRIPTION
+// ---------------------------------------------------------------------------
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding)
@@ -1440,14 +1781,13 @@ async function subscribeToPush() {
 
     toast('Push notifications enabled 🔔', 'success');
   } catch (err) {
-    console.error('Push subscription error:', err);
     toast(friendlyError(err, 'Could not enable notifications'), 'error');
   }
 }
 
-// ============================================================================
+// ---------------------------------------------------------------------------
 // PROFILE / SETTINGS & WALLPAPER HANDLERS
-// ============================================================================
+// ---------------------------------------------------------------------------
 $('open-profile-btn').addEventListener('click', () => {
   $('profile-display-name').value = state.me.display_name;
   $('profile-username').value = state.me.username;
@@ -1465,11 +1805,7 @@ $('theme-segmented').addEventListener('click', (e) => {
   if (btn) applyTheme(btn.dataset.theme);
 });
 
-// WALLPAPER BUTTON LISTENERS
-$('upload-wallpaper-btn').addEventListener('click', () => {
-  $('wallpaper-input').click();
-});
-
+$('upload-wallpaper-btn').addEventListener('click', () => $('wallpaper-input').click());
 $('wallpaper-input').addEventListener('change', (e) => {
   const file = e.target.files[0];
   e.target.value = '';
@@ -1557,9 +1893,9 @@ $('theme-toggle-btn').addEventListener('click', () => {
   applyTheme(current === 'light' ? 'dark' : 'light');
 });
 
-// ============================================================================
-// INIT
-// ============================================================================
+// ---------------------------------------------------------------------------
+// INITIALIZATION
+// ---------------------------------------------------------------------------
 (function init() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/service-worker.js').catch((err) => {
