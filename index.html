@@ -143,7 +143,6 @@
           </div>
         </div>
         <div class="chat-header-actions">
-          <!-- Voice & Video Call Buttons -->
           <button id="start-audio-call-btn" class="icon-btn" title="Start voice call" aria-label="Voice call">
             <svg viewBox="0 0 24 24" width="19" height="19"><path fill="currentColor" d="M6.62 10.79a15.053 15.053 0 0 0 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
           </button>
@@ -202,7 +201,6 @@
           hidden 
         />
 
-        <!-- Voice recording state overlay -->
         <div id="recording-overlay" class="recording-overlay" hidden>
           <span class="rec-dot"></span>
           <span id="recording-timer">0:00</span>
@@ -212,17 +210,11 @@
 
         <textarea id="message-input" placeholder="Message…" rows="1" maxlength="4000" enterkeyhint="send"></textarea>
         
-        <!-- Camera Button -->
         <button type="button" id="camera-btn" class="icon-btn" title="Take photo or video" aria-label="Take photo or video">📷</button>
-
-        <!-- Voice Note Mic Button -->
         <button type="button" id="voice-record-btn" class="icon-btn" title="Record voice note" aria-label="Record voice note">🎙️</button>
-
-        <!-- GIF Picker Toggle Button -->
         <button type="button" id="gif-toggle-btn" class="icon-btn" title="Send GIF" aria-label="Send GIF">
           <span style="font-weight: 700; font-size: 11px; border: 1.5px solid currentColor; border-radius: 4px; padding: 1px 3px;">GIF</span>
         </button>
-
         <button type="button" id="emoji-btn" class="icon-btn" title="Insert emoji" aria-label="Insert emoji">😊</button>
         <button type="submit" id="send-btn" class="icon-btn send-btn" title="Send" aria-label="Send message">
           <span class="btn-label">➤</span>
@@ -230,10 +222,8 @@
         </button>
       </form>
 
-      <!-- EMOJI PICKER -->
       <div id="emoji-picker" class="emoji-picker" hidden></div>
 
-      <!-- GIF PICKER MODAL -->
       <div id="gif-picker-modal" class="gif-picker-wrap" hidden>
         <div class="gif-picker-header">
           <input type="text" id="gif-search-input" placeholder="Search GIFs…" autocomplete="off">
@@ -287,16 +277,13 @@
       <p id="call-status">Calling…</p>
     </div>
 
-    <!-- Active Video Stream Viewport -->
     <div id="call-video-container" class="call-video-wrap" hidden>
       <video id="remote-video" autoplay playsinline></video>
       <video id="local-video" autoplay playsinline muted></video>
     </div>
 
-    <!-- Remote Audio Player for Voice Calls -->
     <audio id="remote-audio" autoplay playsinline></audio>
 
-    <!-- Call Control Actions -->
     <div class="call-actions">
       <button id="accept-call-btn" type="button" class="call-btn accept" hidden>📞 Accept</button>
       <button id="toggle-mic-btn" type="button" class="call-btn ctrl" hidden>🎤 Mute</button>
