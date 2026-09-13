@@ -885,27 +885,37 @@ function openReactionPicker(e, msg) {
     const b = document.createElement('button');
     b.type = 'button';
     b.textContent = emoji;
-    b.addEventListener('pointerdown', async (ev) => {
+
+    const handlePick = async (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
       picker.remove();
-      const already = (msg.message_reactions || []).some(r => r.user_id === state.me.id && r.reaction === emoji);
+
+      const already = (msg.message_reactions || []).some(
+        r => r.user_id === state.me.id && r.reaction === emoji
+      );
       await toggleReaction(msg.id, emoji, already);
-    });
+    };
+
+    b.addEventListener('pointerdown', handlePick);
+    b.addEventListener('click', handlePick);
     picker.appendChild(b);
   });
 
   row.appendChild(picker);
 
+  const outsideCloser = (ev) => {
+    if (!picker.contains(ev.target) && !e.currentTarget.contains(ev.target)) {
+      picker.remove();
+      document.removeEventListener('pointerdown', outsideCloser);
+      document.removeEventListener('touchstart', outsideCloser);
+    }
+  };
+
   setTimeout(() => {
-    const outsideCloser = (ev) => {
-      if (!picker.contains(ev.target)) {
-        picker.remove();
-        document.removeEventListener('pointerdown', outsideCloser);
-      }
-    };
     document.addEventListener('pointerdown', outsideCloser);
-  }, 50);
+    document.addEventListener('touchstart', outsideCloser);
+  }, 100);
 }
 
 async function toggleReaction(messageId, emoji, removing) {
@@ -1324,7 +1334,7 @@ stopSendRecordBtn.addEventListener('click', async () => {
 });
 
 // ---------------------------------------------------------------------------
-// GIPHY PICKER
+// GIPHY API (INTEGRATED)
 // ---------------------------------------------------------------------------
 const gifModal = $('gif-picker-modal');
 const gifBtn = $('gif-toggle-btn');
@@ -1355,17 +1365,24 @@ async function fetchGifs(query) {
       : `https://api.giphy.com/v1/gifs/trending?api_key=${GIPHY_API_KEY}&limit=16&rating=g`;
 
     const res = await fetch(endpoint);
-    const { data } = await res.json();
+    const result = await res.json();
 
+    if (!res.ok) {
+      throw new Error(result.message || 'Failed to fetch from GIPHY');
+    }
+
+    const data = result.data || [];
     gifGrid.innerHTML = '';
-    if (!data || data.length === 0) {
+
+    if (data.length === 0) {
       gifGrid.innerHTML = '<div style="grid-column: span 2; text-align:center; color:var(--text-muted); padding:20px 0;">No GIFs found</div>';
       return;
     }
 
     data.forEach(item => {
-      const imgUrl = item.images.fixed_height_small.url;
-      const fullUrl = item.images.original.url;
+      const imgUrl = item.images?.fixed_height_small?.url || item.images?.fixed_height?.url;
+      const fullUrl = item.images?.original?.url || imgUrl;
+      if (!imgUrl) return;
 
       const img = document.createElement('img');
       img.src = imgUrl;
@@ -1374,7 +1391,8 @@ async function fetchGifs(query) {
       gifGrid.appendChild(img);
     });
   } catch (err) {
-    gifGrid.innerHTML = '<div style="grid-column: span 2; text-align:center; color:var(--text-muted); padding:20px 0;">Failed to load GIFs</div>';
+    console.error('GIPHY Error:', err);
+    gifGrid.innerHTML = `<div style="grid-column: span 2; text-align:center; color:var(--text-muted); padding:20px 0;">${err.message || 'Failed to load GIFs'}</div>`;
   }
 }
 
@@ -1396,7 +1414,7 @@ async function sendGif(gifUrl) {
 }
 
 // ---------------------------------------------------------------------------
-// IN-APP CAMERA: PHOTO & VIDEO CAPTURE
+// IN-APP CAMERA: PHOTO, VIDEO & SWITCHING
 // ---------------------------------------------------------------------------
 let cameraStream = null;
 let videoRecorder = null;
@@ -1404,12 +1422,14 @@ let recordedVideoChunks = [];
 let cameraTimerInterval = null;
 let cameraSeconds = 0;
 let currentCameraMode = 'photo';
+let currentFacingMode = 'user'; // 'user' (front) or 'environment' (back)
 
 const cameraModal = $('camera-modal');
 const cameraVideo = $('camera-video');
 const cameraCanvas = $('camera-canvas');
 const cameraBtn = $('camera-btn');
 const closeCameraBtn = $('close-camera-btn');
+const flipCameraBtn = $('flip-camera-btn');
 const modePhotoBtn = $('mode-photo-btn');
 const modeVideoBtn = $('mode-video-btn');
 const shutterPhotoBtn = $('shutter-photo-btn');
@@ -1425,17 +1445,34 @@ cameraBtn.addEventListener('click', async () => {
 });
 
 async function startCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(track => track.stop());
+  }
+
   try {
     cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: { facingMode: currentFacingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
       audio: true
     });
     cameraVideo.srcObject = cameraStream;
     cameraModal.hidden = false;
-    setCameraMode('photo');
+    setCameraMode(currentCameraMode);
   } catch (err) {
-    toast('Could not access camera or microphone', 'error');
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      cameraVideo.srcObject = cameraStream;
+      cameraModal.hidden = false;
+    } catch (fallbackErr) {
+      toast('Could not access camera or microphone', 'error');
+    }
   }
+}
+
+if (flipCameraBtn) {
+  flipCameraBtn.addEventListener('click', async () => {
+    currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+    await startCamera();
+  });
 }
 
 function stopCamera() {
@@ -1472,6 +1509,12 @@ shutterPhotoBtn.addEventListener('click', () => {
   cameraCanvas.width = cameraVideo.videoWidth || 640;
   cameraCanvas.height = cameraVideo.videoHeight || 480;
   const ctx = cameraCanvas.getContext('2d');
+
+  if (currentFacingMode === 'user') {
+    ctx.translate(cameraCanvas.width, 0);
+    ctx.scale(-1, 1);
+  }
+
   ctx.drawImage(cameraVideo, 0, 0, cameraCanvas.width, cameraCanvas.height);
 
   cameraCanvas.toBlob(async (blob) => {
@@ -1488,7 +1531,9 @@ shutterPhotoBtn.addEventListener('click', () => {
 
       if (uploadError) throw uploadError;
 
-      const { data: pub } = supabaseClient.storage.from('chat-media').getPublicUrl(path);
+      const { data: pub } = supabaseClient.storage
+        .from('chat-media')
+        .getPublicUrl(path);
 
       await supabaseClient.from('messages').insert({
         conversation_id: state.activeConversationId,
@@ -1538,7 +1583,9 @@ shutterVideoBtn.addEventListener('click', () => {
 
       if (uploadError) throw uploadError;
 
-      const { data: pub } = supabaseClient.storage.from('chat-media').getPublicUrl(path);
+      const { data: pub } = supabaseClient.storage
+        .from('chat-media')
+        .getPublicUrl(path);
 
       await supabaseClient.from('messages').insert({
         conversation_id: state.activeConversationId,
