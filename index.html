@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title> Chatbgm </title>
+<title>Chatbgm</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -143,6 +143,14 @@
           </div>
         </div>
         <div class="chat-header-actions">
+          <!-- Voice & Video Call Buttons -->
+          <button id="start-audio-call-btn" class="icon-btn" title="Start voice call" aria-label="Voice call">
+            <svg viewBox="0 0 24 24" width="19" height="19"><path fill="currentColor" d="M6.62 10.79a15.053 15.053 0 0 0 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+          </button>
+          <button id="start-video-call-btn" class="icon-btn" title="Start video call" aria-label="Video call">
+            <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+          </button>
+
           <button id="toggle-msg-search-btn" class="icon-btn" title="Search messages" aria-label="Search messages">
             <svg viewBox="0 0 24 24" width="19" height="19"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 5 1.5-1.5-5-5zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z"/></svg>
           </button>
@@ -266,6 +274,33 @@
       </div>
 
       <span id="camera-timer" class="camera-timer" hidden>0:00</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== WEBRTC CALL MODAL ============================== -->
+<div id="call-modal" class="modal-overlay call-overlay" hidden>
+  <div class="call-card">
+    <div class="call-header">
+      <img id="call-avatar" class="avatar avatar-lg" alt="" />
+      <h3 id="call-user-name">User</h3>
+      <p id="call-status">Calling…</p>
+    </div>
+
+    <!-- Active Video Stream Viewport -->
+    <div id="call-video-container" class="call-video-wrap" hidden>
+      <video id="remote-video" autoplay playsinline></video>
+      <video id="local-video" autoplay playsinline muted></video>
+    </div>
+
+    <!-- Remote Audio Player for Voice Calls -->
+    <audio id="remote-audio" autoplay playsinline></audio>
+
+    <!-- Call Control Actions -->
+    <div class="call-actions">
+      <button id="accept-call-btn" type="button" class="call-btn accept" hidden>📞 Accept</button>
+      <button id="toggle-mic-btn" type="button" class="call-btn ctrl" hidden>🎤 Mute</button>
+      <button id="end-call-btn" type="button" class="call-btn hangup">✕ End</button>
     </div>
   </div>
 </div>
